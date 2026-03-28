@@ -97,32 +97,42 @@ fn run_conversion(
     output_path: &Path,
     timeout: Duration,
 ) -> Result<std::process::Output, String> {
+    let normalized_java_bin = normalize_subprocess_path(java_bin);
+    let normalized_converter_jar = normalize_subprocess_path(converter_jar);
+    let normalized_input_path = normalize_subprocess_path(input_path);
+    let normalized_output_path = normalize_subprocess_path(output_path);
     let args = vec![
         "-jar".to_string(),
-        converter_jar.display().to_string(),
+        normalized_converter_jar.clone(),
         "--input".to_string(),
-        input_path.display().to_string(),
+        normalized_input_path.clone(),
         "--output".to_string(),
-        output_path.display().to_string(),
+        normalized_output_path.clone(),
     ];
     log_processing_event(
         app,
         "info",
         "mpp_conversion_subprocess_spawn",
         json!({
-            "command": java_bin.display().to_string(),
+            "command": normalized_java_bin.clone(),
             "arguments": args,
             "timeoutMs": timeout.as_millis(),
+            "normalizedPaths": {
+                "javaBin": normalized_java_bin,
+                "converterJar": normalized_converter_jar,
+                "inputPath": normalized_input_path,
+                "outputPath": normalized_output_path,
+            }
         }),
     );
 
-    let mut child = Command::new(java_bin)
+    let mut child = Command::new(normalize_subprocess_path(java_bin))
         .arg("-jar")
-        .arg(converter_jar)
+        .arg(normalize_subprocess_path(converter_jar))
         .arg("--input")
-        .arg(input_path)
+        .arg(normalize_subprocess_path(input_path))
         .arg("--output")
-        .arg(output_path)
+        .arg(normalize_subprocess_path(output_path))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -132,7 +142,7 @@ fn run_conversion(
                 "error",
                 "mpp_conversion_subprocess_spawn_failed",
                 json!({
-                    "command": java_bin.display().to_string(),
+                    "command": normalize_subprocess_path(java_bin),
                     "message": error.to_string(),
                 }),
             );
@@ -172,8 +182,8 @@ fn run_conversion(
                         "mpp_conversion_subprocess_timeout",
                         json!({
                             "timeoutMs": timeout.as_millis(),
-                            "command": java_bin.display().to_string(),
-                            "outputPath": output_path.display().to_string(),
+                            "command": normalize_subprocess_path(java_bin),
+                            "outputPath": normalize_subprocess_path(output_path),
                         }),
                     );
                     return Err("O tempo limite de conversao segura do arquivo .mpp foi excedido.".to_string());
@@ -696,4 +706,9 @@ fn temp_xml_payload(path: &Path, metadata: Option<&fs::Metadata>) -> serde_json:
         "isFile": path.is_file(),
         "sizeBytes": metadata.map(|value| value.len()),
     })
+}
+
+fn normalize_subprocess_path(path: &Path) -> String {
+    let raw = path.display().to_string();
+    raw.strip_prefix(r"\\?\").unwrap_or(&raw).to_string()
 }
