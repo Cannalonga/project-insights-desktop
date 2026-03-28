@@ -1,0 +1,13 @@
+node_modules/
+dist/
+tauri-dev.out.log
+tauri-dev.err.log
+src-tauri/target/
+src-tauri/resources/mpp-converter/runtime/
+data/*
+!data/example/
+!data/example/.gitkeep
+exports/
+logs/
+*.csv
+manifest.json

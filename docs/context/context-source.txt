@@ -1,0 +1,59 @@
+PROJECT: CannaConverter 2.0
+
+TYPE:
+Local desktop application (offline-first)
+
+GOAL:
+Transform MPP files into structured, usable data (CSV, JSON, BI-ready)
+
+CORE PIPELINE:
+MPP -> parse -> internal model -> validate -> diagnostics -> export
+
+ARCHITECTURE RULES:
+- No API
+- No database
+- No authentication
+- No multi-tenant
+- No microservices
+- No queues
+- No Docker-first design
+- Minimal dependencies
+- TypeScript only
+- Clear separation: core vs UI
+- No silent failures
+- No premature abstraction
+
+CORE VALUE:
+Extract real usable data from MPP (not just convert files)
+
+V1 FEATURES:
+- open MPP file
+- build internal model
+- validate data
+- generate diagnostics
+- preview project
+- export CSV
+- export JSON
+
+FORBIDDEN:
+Anything that does not improve:
+- value extraction
+- clarity
+- reliability
+
+CURRENT STATE:
+- repo created
+- git initialized and pushed
+- folder structure created
+- docs structure created
+- skills aligned and corrected
+
+NEXT STEP:
+Populate documentation files:
+- docs/01-context/core.md
+- docs/02-architecture/architecture.md
+- docs/03-execution/starter-pack.md
+- docs/04-rules/*
+
+THEN:
+Commit docs and start implementation with Codex using strict scope control

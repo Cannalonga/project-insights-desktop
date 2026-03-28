@@ -1,0 +1,19 @@
+[package]
+name = "cannaconverter-2"
+version = "0.1.0"
+description = "CannaConverter 2.0 desktop app"
+authors = ["Rafael"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "1.8", features = [ "dialog-save", "dialog-open", "fs-read-file", "fs-read-dir", "fs-write-file", "fs-create-dir", "fs-exists"] }
+quick-xml = "0.38"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
