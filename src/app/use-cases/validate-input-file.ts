@@ -62,7 +62,7 @@ function detectMimeType(bytes: Uint8Array): InputFileValidationResult["mimeType"
 export async function validateInputFile(filePath: string): Promise<InputFileValidationResult> {
   const extension = getExtension(filePath);
   if (!extension) {
-    throw new InputFileValidationError("Arquivo inválido. Use um arquivo .mpp válido.");
+    throw new InputFileValidationError("Selecione um arquivo .mpp ou .xml (MSPDI) para continuar.");
   }
 
   const bytes = await readBinaryFile(filePath);
@@ -82,11 +82,11 @@ export async function validateInputFile(filePath: string): Promise<InputFileVali
   }
 
   if (extension === ".mpp" && mimeType !== "application/vnd.ms-project") {
-    throw new InputFileValidationError("O arquivo .mpp selecionado parece corrompido ou com formato inválido.");
+    throw new InputFileValidationError("Não foi possível ler este arquivo .mpp com segurança.");
   }
 
   if (extension === ".xml" && mimeType !== "application/xml") {
-    throw new InputFileValidationError("O arquivo .xml selecionado parece corrompido ou com formato inválido.");
+    throw new InputFileValidationError("Não foi possível ler este arquivo .xml com segurança.");
   }
 
   return {

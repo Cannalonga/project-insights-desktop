@@ -27,7 +27,7 @@ function getExecutiveHeadline(status: string | undefined): string {
 }
 
 export function App() {
-  const { result, loading, error, processFile, reportError } = useProcessMPP();
+  const { result, loading, error, processingMessage, slowProcessingMessage, processFile, reportError } = useProcessMPP();
   const [presentationMode, setPresentationMode] = useState<PresentationMode>("complete");
   const isExecutiveMode = presentationMode === "executive";
 
@@ -71,9 +71,9 @@ export function App() {
         </div>
 
         <div className="hero-actions">
-          <FilePicker processFile={processFile} reportError={reportError} />
+          <FilePicker loading={loading} processFile={processFile} reportError={reportError} />
           <span className="hero-status">
-            {result ? `Leitura pronta para ${result.model.name || "projeto carregado"}` : "Selecione um arquivo MPP"}
+            {result ? `Leitura pronta para ${result.model.name || "projeto carregado"}` : "Selecione um arquivo MPP ou XML"}
           </span>
         </div>
 
@@ -125,7 +125,17 @@ export function App() {
         ) : null}
       </section>
 
-      {loading ? <p className="app-message info">Processando cronograma e montando o painel operacional...</p> : null}
+      {loading ? (
+        <div className="app-message info">
+          <div className="processing-status">
+            <span className="processing-spinner" aria-hidden="true" />
+            <strong>{processingMessage ?? "Processando arquivo..."}</strong>
+          </div>
+          <p className="app-message-detail">
+            {slowProcessingMessage ?? "Projetos maiores podem levar mais tempo para analise. Aguarde a conclusao do processamento."}
+          </p>
+        </div>
+      ) : null}
       {error ? <p className="app-message error">{error}</p> : null}
 
       <div className="dashboard-grid">

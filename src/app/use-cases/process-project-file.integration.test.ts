@@ -32,7 +32,7 @@ const validXml = `
 `;
 
 describe("processProjectFile integration", () => {
-  it("keeps the public entrypoint restricted to mpp and still processes converted xml internally", async () => {
+  it("processes converted mpp and also supports direct xml fallback", async () => {
     const mppResult = await processProjectFile(
       {
         filePath: "D:\\Projeto.mpp",
@@ -41,15 +41,19 @@ describe("processProjectFile integration", () => {
       async () => ({ extension: ".mpp", mimeType: "application/vnd.ms-project", sizeBytes: 1024 }),
     );
 
-    await expect(
-      processProjectFile({
+    const xmlResult = await processProjectFile(
+      {
         filePath: "D:\\Projeto.xml",
-        xmlContent: validXml,
-      }),
-    ).rejects.toThrow("A entrada do CannaConverter 2.0 aceita apenas arquivos .mpp.");
+      },
+      async () => validXml,
+      async () => ({ extension: ".xml", mimeType: "application/xml", sizeBytes: 1024 }),
+      async () => validXml,
+    );
 
     expect(mppResult.model.name).toBe("Projeto Equivalente");
     expect(mppResult.model.tasks).toHaveLength(2);
     expect(mppResult.insights.summary.status).toBeDefined();
+    expect(xmlResult.model.name).toBe("Projeto Equivalente");
+    expect(xmlResult.model.tasks).toHaveLength(2);
   });
 });

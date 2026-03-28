@@ -1,3 +1,4 @@
+use crate::logger::append_processing_log_line;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::fs;
@@ -15,6 +16,15 @@ const OLE_SIGNATURE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
 #[tauri::command]
 pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String, String> {
+    let _ = append_processing_log_line(
+        &app,
+        &format!(
+            "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_started\",\"filePath\":{}}}",
+            current_timestamp(),
+            json_string(&input_path)
+        ),
+    );
+
     if input_path.trim().is_empty() {
         return Err("Arquivo .mpp invalido ou vazio.".into());
     }
@@ -26,6 +36,7 @@ pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String
     let converter_jar = resolve_converter_jar(&app)?;
     let temp_xml_path = create_temp_xml_path()?;
 
+    let conversion_started_at = SystemTime::now();
     let execution_result = run_conversion(
         &java_bin,
         &converter_jar,
@@ -45,6 +56,34 @@ pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String
                 "[convert_mpp_to_mspdi] failed to cleanup temp xml {}: {}",
                 temp_xml_path.display(),
                 cleanup_error
+            );
+        }
+    }
+
+    let elapsed_ms = conversion_started_at.elapsed().unwrap_or_default().as_millis();
+    match &result {
+        Ok(xml) => {
+            let _ = append_processing_log_line(
+                &app,
+                &format!(
+                    "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_completed\",\"filePath\":{},\"xmlLength\":{},\"durationMs\":{}}}",
+                    current_timestamp(),
+                    json_string(&input_path),
+                    xml.len(),
+                    elapsed_ms
+                ),
+            );
+        }
+        Err(error) => {
+            let _ = append_processing_log_line(
+                &app,
+                &format!(
+                    "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_failed\",\"filePath\":{},\"durationMs\":{},\"message\":{}}}",
+                    current_timestamp(),
+                    json_string(&input_path),
+                    elapsed_ms,
+                    json_string(error)
+                ),
             );
         }
     }
@@ -275,4 +314,12 @@ fn log_process_output(status: &ExitStatus, stdout: &[u8], stderr: &[u8]) {
     if !stderr_text.trim().is_empty() {
         eprintln!("[convert_mpp_to_mspdi] converter stderr:\n{}", stderr_text);
     }
+}
+
+fn current_timestamp() -> String {
+    format!("{:?}", SystemTime::now())
+}
+
+fn json_string(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"<serialization-error>\"".to_string())
 }

@@ -210,6 +210,28 @@ select {
   color: #20496f;
 }
 
+.app-message-detail {
+  margin: 8px 0 0;
+  color: inherit;
+  line-height: 1.5;
+}
+
+.processing-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.processing-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 3px solid rgba(47, 109, 176, 0.2);
+  border-top-color: var(--info);
+  animation: processing-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
 .primary-button,
 .secondary-button {
   border: none;
@@ -223,6 +245,24 @@ select {
   background: linear-gradient(135deg, #304f3f, #3e6b52);
   color: #fff;
   box-shadow: 0 12px 24px rgba(48, 79, 63, 0.22);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+  transform: none;
+  box-shadow: none;
+}
+
+@keyframes processing-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .secondary-button {

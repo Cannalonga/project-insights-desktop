@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { processMPPWithHistory } from "./process-mpp-with-history";
 import { MPPConversionError } from "./convert-mpp-to-xml";
-import { processProjectFile } from "./process-project-file";
+import type { ProcessingLogPayload } from "./processing-log";
+import { ProjectFileGuidanceError, processProjectFile } from "./process-project-file";
 import { InputFileValidationError } from "./validate-input-file";
 
 vi.mock("./process-mpp-with-history", () => ({
@@ -34,21 +35,53 @@ describe("processProjectFile", () => {
     mockedProcessMPPWithHistory.mockReset();
   });
 
-  it("rejects direct xml input explicitly", async () => {
-    await expect(
-      processProjectFile({
-        filePath: "D:\\Projeto.xml",
-        xmlContent: validXml,
-      }),
-    ).rejects.toThrow("A entrada do CannaConverter 2.0 aceita apenas arquivos .mpp.");
+  it("processes xml input directly when MSPDI is provided as the safe path", async () => {
+    mockedProcessMPPWithHistory.mockResolvedValueOnce({ marker: "xml" } as never);
+    const validateFile = vi.fn().mockResolvedValue({
+      extension: ".xml",
+      mimeType: "application/xml",
+      sizeBytes: 2048,
+    });
+    const readXmlFile = vi.fn().mockResolvedValue(validXml);
+    const onStage = vi.fn();
+    const logEvent = vi.fn<(_: ProcessingLogPayload) => Promise<void>>().mockResolvedValue(undefined);
 
-    expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();
+    const result = await processProjectFile(
+      {
+        filePath: "D:\\Projeto.xml",
+      },
+      vi.fn(),
+      validateFile,
+      readXmlFile,
+      { onStage, logEvent },
+    );
+
+    expect(result).toEqual({ marker: "xml" });
+    expect(validateFile).toHaveBeenCalledWith("D:\\Projeto.xml");
+    expect(readXmlFile).toHaveBeenCalledWith("D:\\Projeto.xml");
+    expect(mockedProcessMPPWithHistory).toHaveBeenCalledWith({
+      filePath: "D:\\Projeto.xml",
+      xmlContent: validXml,
+    });
+    expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
+      "validating_input",
+      "reading_xml",
+      "generating_analysis",
+      "completed",
+    ]);
+    expect(logEvent).toHaveBeenCalled();
   });
 
   it("converts mpp to xml before calling the MSPDI pipeline", async () => {
     mockedProcessMPPWithHistory.mockResolvedValueOnce({ marker: "mpp" } as never);
     const convertMppToXml = vi.fn().mockResolvedValue(validXml);
-    const validateFile = vi.fn().mockResolvedValue(undefined);
+    const validateFile = vi.fn().mockResolvedValue({
+      extension: ".mpp",
+      mimeType: "application/vnd.ms-project",
+      sizeBytes: 1024,
+    });
+    const onStage = vi.fn();
+    const logEvent = vi.fn<(_: ProcessingLogPayload) => Promise<void>>().mockResolvedValue(undefined);
 
     const result = await processProjectFile(
       {
@@ -56,6 +89,8 @@ describe("processProjectFile", () => {
       },
       convertMppToXml,
       validateFile,
+      undefined,
+      { onStage, logEvent },
     );
 
     expect(result).toEqual({ marker: "mpp" });
@@ -65,13 +100,25 @@ describe("processProjectFile", () => {
       filePath: "D:\\Projeto.mpp",
       xmlContent: validXml,
     });
+    expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
+      "validating_input",
+      "converting_mpp",
+      "generating_analysis",
+      "completed",
+    ]);
+    expect(logEvent).toHaveBeenCalled();
   });
 
-  it("fails explicitly when mpp conversion is not possible", async () => {
+  it("returns guided fallback when mpp conversion is not possible", async () => {
     const convertMppToXml = vi
       .fn()
       .mockRejectedValue(new MPPConversionError("Nao foi possivel processar o arquivo .mpp."));
-    const validateFile = vi.fn().mockResolvedValue(undefined);
+    const validateFile = vi.fn().mockResolvedValue({
+      extension: ".mpp",
+      mimeType: "application/vnd.ms-project",
+      sizeBytes: 1024,
+    });
+    const logEvent = vi.fn<(_: ProcessingLogPayload) => Promise<void>>().mockResolvedValue(undefined);
 
     await expect(
       processProjectFile(
@@ -80,10 +127,13 @@ describe("processProjectFile", () => {
         },
         convertMppToXml,
         validateFile,
+        undefined,
+        { logEvent },
       ),
-    ).rejects.toBeInstanceOf(MPPConversionError);
+    ).rejects.toBeInstanceOf(ProjectFileGuidanceError);
 
     expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();
+    expect(logEvent).toHaveBeenCalled();
   });
 
   it("fails explicitly when the selected file is unsafe before conversion starts", async () => {
