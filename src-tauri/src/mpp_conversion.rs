@@ -1,6 +1,7 @@
 use crate::logger::append_processing_log_line;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -16,13 +17,14 @@ const OLE_SIGNATURE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
 #[tauri::command]
 pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String, String> {
-    let _ = append_processing_log_line(
+    log_runtime_context(&app, &input_path);
+    log_processing_event(
         &app,
-        &format!(
-            "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_started\",\"filePath\":{}}}",
-            current_timestamp(),
-            json_string(&input_path)
-        ),
+        "info",
+        "mpp_conversion_started",
+        json!({
+            "filePath": input_path,
+        }),
     );
 
     if input_path.trim().is_empty() {
@@ -35,9 +37,11 @@ pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String
     let java_bin = resolve_java_bin(&app)?;
     let converter_jar = resolve_converter_jar(&app)?;
     let temp_xml_path = create_temp_xml_path()?;
+    log_temp_xml_plan(&app, &temp_xml_path);
 
     let conversion_started_at = SystemTime::now();
     let execution_result = run_conversion(
+        &app,
         &java_bin,
         &converter_jar,
         &input,
@@ -46,44 +50,37 @@ pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String
     );
 
     let result = match execution_result {
-        Ok(output) => validate_and_read_xml(&temp_xml_path, output),
+        Ok(output) => validate_and_read_xml(&app, &temp_xml_path, output),
         Err(error) => Err(error),
     };
 
-    if let Err(cleanup_error) = fs::remove_file(&temp_xml_path) {
-        if cleanup_error.kind() != std::io::ErrorKind::NotFound {
-            eprintln!(
-                "[convert_mpp_to_mspdi] failed to cleanup temp xml {}: {}",
-                temp_xml_path.display(),
-                cleanup_error
-            );
-        }
-    }
+    log_temp_xml_state(&app, "temp_xml_before_cleanup", &temp_xml_path);
+    cleanup_temp_xml(&app, &temp_xml_path);
 
     let elapsed_ms = conversion_started_at.elapsed().unwrap_or_default().as_millis();
     match &result {
         Ok(xml) => {
-            let _ = append_processing_log_line(
+            log_processing_event(
                 &app,
-                &format!(
-                    "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_completed\",\"filePath\":{},\"xmlLength\":{},\"durationMs\":{}}}",
-                    current_timestamp(),
-                    json_string(&input_path),
-                    xml.len(),
-                    elapsed_ms
-                ),
+                "info",
+                "mpp_conversion_completed",
+                json!({
+                    "filePath": input_path,
+                    "xmlLength": xml.len(),
+                    "durationMs": elapsed_ms,
+                }),
             );
         }
         Err(error) => {
-            let _ = append_processing_log_line(
+            log_processing_event(
                 &app,
-                &format!(
-                    "{{\"timestamp\":\"{}\",\"event\":\"mpp_conversion_failed\",\"filePath\":{},\"durationMs\":{},\"message\":{}}}",
-                    current_timestamp(),
-                    json_string(&input_path),
-                    elapsed_ms,
-                    json_string(error)
-                ),
+                "error",
+                "mpp_conversion_failed",
+                json!({
+                    "filePath": input_path,
+                    "durationMs": elapsed_ms,
+                    "message": error,
+                }),
             );
         }
     }
@@ -92,12 +89,32 @@ pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String
 }
 
 fn run_conversion(
+    app: &AppHandle,
     java_bin: &Path,
     converter_jar: &Path,
     input_path: &Path,
     output_path: &Path,
     timeout: Duration,
 ) -> Result<std::process::Output, String> {
+    let args = vec![
+        "-jar".to_string(),
+        converter_jar.display().to_string(),
+        "--input".to_string(),
+        input_path.display().to_string(),
+        "--output".to_string(),
+        output_path.display().to_string(),
+    ];
+    log_processing_event(
+        app,
+        "info",
+        "mpp_conversion_subprocess_spawn",
+        json!({
+            "command": java_bin.display().to_string(),
+            "arguments": args,
+            "timeoutMs": timeout.as_millis(),
+        }),
+    );
+
     let mut child = Command::new(java_bin)
         .arg("-jar")
         .arg(converter_jar)
@@ -108,7 +125,18 @@ fn run_conversion(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|_| "Nao foi possivel iniciar a conversao segura do arquivo .mpp.".to_string())?;
+        .map_err(|error| {
+            log_processing_event(
+                app,
+                "error",
+                "mpp_conversion_subprocess_spawn_failed",
+                json!({
+                    "command": java_bin.display().to_string(),
+                    "message": error.to_string(),
+                }),
+            );
+            "Nao foi possivel iniciar a conversao segura do arquivo .mpp.".to_string()
+        })?;
 
     let start = SystemTime::now();
     loop {
@@ -116,8 +144,18 @@ fn run_conversion(
             Ok(Some(_)) => {
                 let output = child
                     .wait_with_output()
-                    .map_err(|_| "Nao foi possivel concluir a conversao segura do arquivo .mpp.".to_string())?;
-                log_process_output(&output.status, &output.stdout, &output.stderr);
+                    .map_err(|error| {
+                        log_processing_event(
+                            app,
+                            "error",
+                            "mpp_conversion_subprocess_wait_failed",
+                            json!({
+                                "message": error.to_string(),
+                            }),
+                        );
+                        "Nao foi possivel concluir a conversao segura do arquivo .mpp.".to_string()
+                    })?;
+                log_process_output(app, &output.status, &output.stdout, &output.stderr);
                 if !output.status.success() {
                     return Err("Falha ao converter o arquivo .mpp para o formato interno seguro.".to_string());
                 }
@@ -127,6 +165,16 @@ fn run_conversion(
                 if start.elapsed().unwrap_or_default() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
+                    log_processing_event(
+                        app,
+                        "error",
+                        "mpp_conversion_subprocess_timeout",
+                        json!({
+                            "timeoutMs": timeout.as_millis(),
+                            "command": java_bin.display().to_string(),
+                            "outputPath": output_path.display().to_string(),
+                        }),
+                    );
                     return Err("O tempo limite de conversao segura do arquivo .mpp foi excedido.".to_string());
                 }
                 thread::sleep(Duration::from_millis(100));
@@ -134,6 +182,14 @@ fn run_conversion(
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                log_processing_event(
+                    app,
+                    "error",
+                    "mpp_conversion_subprocess_wait_error",
+                    json!({
+                        "message": error.to_string(),
+                    }),
+                );
                 return Err(format!("Falha ao aguardar o processo de conversao segura: {error}"));
             }
         }
@@ -141,6 +197,7 @@ fn run_conversion(
 }
 
 fn validate_and_read_xml(
+    app: &AppHandle,
     temp_xml_path: &Path,
     output: std::process::Output,
 ) -> Result<String, String> {
@@ -150,6 +207,12 @@ fn validate_and_read_xml(
 
     let metadata = fs::metadata(temp_xml_path)
         .map_err(|_| "Nao foi possivel validar o XML convertido.".to_string())?;
+    log_temp_xml_state_from_metadata(
+        app,
+        temp_xml_path,
+        Some(&metadata),
+        "temp_xml_after_subprocess",
+    );
     if metadata.len() == 0 {
         return Err("O XML convertido esta vazio.".into());
     }
@@ -246,23 +309,80 @@ fn validate_input_mpp_file(input: &Path) -> Result<(), String> {
 fn resolve_converter_jar(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("CANNACONVERTER_MPP_CONVERTER_JAR") {
         let jar = PathBuf::from(path);
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_candidate",
+            resource_candidate_payload("converterJar", "env", &jar),
+        );
         if jar.exists() && jar.is_file() {
+            log_processing_event(
+                app,
+                "info",
+                "mpp_conversion_resource_selected",
+                json!({
+                    "resource": "converterJar",
+                    "source": "env",
+                    "path": jar.display().to_string(),
+                }),
+            );
             return Ok(jar);
         }
     }
 
     if let Some(resource_path) = app.path_resolver().resolve_resource(CONVERTER_RELATIVE_PATH) {
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_candidate",
+            resource_candidate_payload("converterJar", "bundle-resource", &resource_path),
+        );
         if resource_path.exists() && resource_path.is_file() {
+            log_processing_event(
+                app,
+                "info",
+                "mpp_conversion_resource_selected",
+                json!({
+                    "resource": "converterJar",
+                    "source": "bundle-resource",
+                    "path": resource_path.display().to_string(),
+                }),
+            );
             return Ok(resource_path);
         }
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let dev_resource_path = manifest_dir.join("resources").join("mpp-converter").join("mpp-converter.jar");
+    log_processing_event(
+        app,
+        "info",
+        "mpp_conversion_resource_candidate",
+        resource_candidate_payload("converterJar", "dev-resource", &dev_resource_path),
+    );
     if dev_resource_path.exists() && dev_resource_path.is_file() {
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_selected",
+            json!({
+                "resource": "converterJar",
+                "source": "dev-resource",
+                "path": dev_resource_path.display().to_string(),
+            }),
+        );
         return Ok(dev_resource_path);
     }
 
+    log_processing_event(
+        app,
+        "error",
+        "mpp_conversion_resource_missing",
+        json!({
+            "resource": "converterJar",
+            "expectedRelativePath": CONVERTER_RELATIVE_PATH,
+        }),
+    );
     Err(format!(
         "MPP converter JAR not found. Expected resource at {}",
         CONVERTER_RELATIVE_PATH
@@ -272,7 +392,23 @@ fn resolve_converter_jar(app: &AppHandle) -> Result<PathBuf, String> {
 fn resolve_java_bin(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("CANNACONVERTER_JAVA_BIN") {
         let java_bin = PathBuf::from(path);
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_candidate",
+            resource_candidate_payload("javaBin", "env", &java_bin),
+        );
         if java_bin.exists() && java_bin.is_file() {
+            log_processing_event(
+                app,
+                "info",
+                "mpp_conversion_resource_selected",
+                json!({
+                    "resource": "javaBin",
+                    "source": "env",
+                    "path": java_bin.display().to_string(),
+                }),
+            );
             return Ok(java_bin);
         }
     }
@@ -281,11 +417,38 @@ fn resolve_java_bin(app: &AppHandle) -> Result<PathBuf, String> {
         .path_resolver()
         .resolve_resource("mpp-converter/runtime/bin/java.exe")
     {
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_candidate",
+            resource_candidate_payload("javaBin", "bundle-resource", &java_resource),
+        );
         if java_resource.exists() && java_resource.is_file() {
+            log_processing_event(
+                app,
+                "info",
+                "mpp_conversion_resource_selected",
+                json!({
+                    "resource": "javaBin",
+                    "source": "bundle-resource",
+                    "path": java_resource.display().to_string(),
+                }),
+            );
             return Ok(java_resource);
         }
     }
 
+    log_processing_event(
+        app,
+        "warn",
+        "mpp_conversion_resource_selected",
+        json!({
+            "resource": "javaBin",
+            "source": "path-fallback",
+            "path": "java",
+            "exists": serde_json::Value::Null,
+        }),
+    );
     Ok(PathBuf::from("java"))
 }
 
@@ -299,7 +462,7 @@ fn create_temp_xml_path() -> Result<PathBuf, String> {
     )))
 }
 
-fn log_process_output(status: &ExitStatus, stdout: &[u8], stderr: &[u8]) {
+fn log_process_output(app: &AppHandle, status: &ExitStatus, stdout: &[u8], stderr: &[u8]) {
     eprintln!(
         "[convert_mpp_to_mspdi] converter exit code: {:?}",
         status.code()
@@ -314,12 +477,168 @@ fn log_process_output(status: &ExitStatus, stdout: &[u8], stderr: &[u8]) {
     if !stderr_text.trim().is_empty() {
         eprintln!("[convert_mpp_to_mspdi] converter stderr:\n{}", stderr_text);
     }
+
+    log_processing_event(
+        app,
+        if status.success() { "info" } else { "error" },
+        "mpp_conversion_subprocess_completed",
+        json!({
+            "exitCode": status.code(),
+            "success": status.success(),
+            "stdout": stdout_text.to_string(),
+            "stderr": stderr_text.to_string(),
+        }),
+    );
 }
 
 fn current_timestamp() -> String {
     format!("{:?}", SystemTime::now())
 }
 
-fn json_string(value: &str) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "\"<serialization-error>\"".to_string())
+fn log_runtime_context(app: &AppHandle, input_path: &str) {
+    let package_info = app.package_info();
+    let current_exe = std::env::current_exe()
+        .ok()
+        .map(|path| path.display().to_string());
+    let current_dir = std::env::current_dir()
+        .ok()
+        .map(|path| path.display().to_string());
+    let resource_dir = app
+        .path_resolver()
+        .resource_dir()
+        .map(|path| path.display().to_string());
+    let app_local_data_dir = app
+        .path_resolver()
+        .app_local_data_dir()
+        .map(|path| path.display().to_string());
+    let app_log_dir = app
+        .path_resolver()
+        .app_log_dir()
+        .map(|path| path.display().to_string());
+
+    log_processing_event(
+        app,
+        "info",
+        "mpp_conversion_runtime_context",
+        json!({
+            "filePath": input_path,
+            "mode": if cfg!(debug_assertions) { "dev" } else { "build" },
+            "packageName": package_info.name.clone(),
+            "packageVersion": package_info.version.to_string(),
+            "manifestDir": env!("CARGO_MANIFEST_DIR"),
+            "currentExe": current_exe,
+            "currentDir": current_dir,
+            "resourceDir": resource_dir,
+            "appLocalDataDir": app_local_data_dir,
+            "appLogDir": app_log_dir,
+            "tempDir": std::env::temp_dir().display().to_string(),
+        }),
+    );
+}
+
+fn log_temp_xml_plan(app: &AppHandle, temp_xml_path: &Path) {
+    let parent = temp_xml_path.parent().map(|path| path.to_path_buf());
+    log_processing_event(
+        app,
+        "info",
+        "temp_xml_path_resolved",
+        json!({
+            "tempXmlPath": temp_xml_path.display().to_string(),
+            "tempXmlDir": parent.as_ref().map(|path| path.display().to_string()),
+            "tempXmlDirExists": parent.as_ref().map(|path| path.exists()),
+        }),
+    );
+}
+
+fn log_temp_xml_state(app: &AppHandle, event: &str, path: &Path) {
+    let metadata = fs::metadata(path).ok();
+    log_processing_event(app, "info", event, temp_xml_payload(path, metadata.as_ref()));
+}
+
+fn log_temp_xml_state_from_metadata(
+    app: &AppHandle,
+    path: &Path,
+    metadata: Option<&fs::Metadata>,
+    event: &str,
+) {
+    eprintln!(
+        "[convert_mpp_to_mspdi] {} path={} exists={} size={:?}",
+        event,
+        path.display(),
+        path.exists(),
+        metadata.map(|value| value.len())
+    );
+    log_processing_event(app, "info", event, temp_xml_payload(path, metadata));
+}
+
+fn cleanup_temp_xml(app: &AppHandle, temp_xml_path: &Path) {
+    match fs::remove_file(temp_xml_path) {
+        Ok(()) => {
+            log_processing_event(
+                app,
+                "info",
+                "temp_xml_cleanup_completed",
+                json!({
+                    "tempXmlPath": temp_xml_path.display().to_string(),
+                    "existsAfterCleanup": temp_xml_path.exists(),
+                }),
+            );
+        }
+        Err(cleanup_error) => {
+            if cleanup_error.kind() != std::io::ErrorKind::NotFound {
+                eprintln!(
+                    "[convert_mpp_to_mspdi] failed to cleanup temp xml {}: {}",
+                    temp_xml_path.display(),
+                    cleanup_error
+                );
+            }
+            log_processing_event(
+                app,
+                if cleanup_error.kind() == std::io::ErrorKind::NotFound {
+                    "info"
+                } else {
+                    "warn"
+                },
+                "temp_xml_cleanup_result",
+                json!({
+                    "tempXmlPath": temp_xml_path.display().to_string(),
+                    "message": cleanup_error.to_string(),
+                    "notFound": cleanup_error.kind() == std::io::ErrorKind::NotFound,
+                }),
+            );
+        }
+    }
+}
+
+fn log_processing_event(app: &AppHandle, level: &str, event: &str, payload: serde_json::Value) {
+    let entry = json!({
+        "timestamp": current_timestamp(),
+        "level": level,
+        "event": event,
+        "payload": payload,
+    });
+    let serialized = serde_json::to_string(&entry)
+        .unwrap_or_else(|_| format!("{{\"timestamp\":\"{}\",\"level\":\"error\",\"event\":\"log_serialization_failed\"}}", current_timestamp()));
+    let _ = append_processing_log_line(app, &serialized);
+}
+
+fn resource_candidate_payload(resource: &str, source: &str, path: &Path) -> serde_json::Value {
+    let metadata = fs::metadata(path).ok();
+    json!({
+        "resource": resource,
+        "source": source,
+        "path": path.display().to_string(),
+        "exists": path.exists(),
+        "isFile": path.is_file(),
+        "sizeBytes": metadata.as_ref().map(|value| value.len()),
+    })
+}
+
+fn temp_xml_payload(path: &Path, metadata: Option<&fs::Metadata>) -> serde_json::Value {
+    json!({
+        "tempXmlPath": path.display().to_string(),
+        "exists": path.exists(),
+        "isFile": path.is_file(),
+        "sizeBytes": metadata.map(|value| value.len()),
+    })
 }

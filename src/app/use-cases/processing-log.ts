@@ -36,3 +36,19 @@ export async function appendProcessingLog(payload: ProcessingLogPayload): Promis
     });
   }
 }
+
+export async function exportProcessingLogForUser(): Promise<string | null> {
+  const tauriIpc = (window as Window & { __TAURI_IPC__?: unknown }).__TAURI_IPC__;
+
+  if (typeof tauriIpc !== "function") {
+    console.info("[exportProcessingLogForUser] tauri ipc unavailable; skipping desktop log export");
+    return null;
+  }
+
+  try {
+    return await invoke<string>("export_processing_log_for_user");
+  } catch (error) {
+    console.warn("[exportProcessingLogForUser] failed to export desktop log copy", { error });
+    return null;
+  }
+}

@@ -1,6 +1,10 @@
 import { readTextFile } from "@tauri-apps/api/fs";
 
-import { appendProcessingLog, type ProcessingLogPayload } from "./processing-log";
+import {
+  appendProcessingLog,
+  exportProcessingLogForUser,
+  type ProcessingLogPayload,
+} from "./processing-log";
 import { convertMPPToXML, MPPConversionError } from "./convert-mpp-to-xml";
 import { processMPPWithHistory } from "./process-mpp-with-history";
 import type { ProcessInput, ProcessResult } from "./process-mpp";
@@ -20,6 +24,7 @@ type ProcessProjectFileOptions = {
   onStage?: (stage: ProcessingStage) => void;
   now?: () => number;
   logEvent?: (payload: ProcessingLogPayload) => Promise<void>;
+  exportUserLog?: () => Promise<string | null>;
 };
 
 function isSupportedFile(filePath?: string): boolean {
@@ -54,6 +59,21 @@ async function emitLog(
 ): Promise<void> {
   const logger = options?.logEvent ?? appendProcessingLog;
   await logger(payload);
+}
+
+async function exportUserAccessibleLog(
+  options: ProcessProjectFileOptions | undefined,
+): Promise<string | null> {
+  const exporter = options?.exportUserLog ?? exportProcessingLogForUser;
+  return exporter();
+}
+
+function buildMppFallbackMessage(userLogPath?: string | null): string {
+  if (!userLogPath) {
+    return MPP_FALLBACK_MESSAGE;
+  }
+
+  return `${MPP_FALLBACK_MESSAGE} Um log tecnico foi salvo em ${userLogPath}.`;
 }
 
 export class ProjectFileGuidanceError extends Error {
@@ -164,7 +184,8 @@ export async function processProjectFile(
       });
 
       if (error instanceof MPPConversionError) {
-        throw new ProjectFileGuidanceError(MPP_FALLBACK_MESSAGE);
+        const userLogPath = await exportUserAccessibleLog(options);
+        throw new ProjectFileGuidanceError(buildMppFallbackMessage(userLogPath));
       }
 
       throw error;

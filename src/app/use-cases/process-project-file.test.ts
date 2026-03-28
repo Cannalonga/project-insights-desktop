@@ -119,6 +119,9 @@ describe("processProjectFile", () => {
       sizeBytes: 1024,
     });
     const logEvent = vi.fn<(_: ProcessingLogPayload) => Promise<void>>().mockResolvedValue(undefined);
+    const exportUserLog = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValue("C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log");
 
     await expect(
       processProjectFile(
@@ -128,12 +131,43 @@ describe("processProjectFile", () => {
         convertMppToXml,
         validateFile,
         undefined,
-        { logEvent },
+        { logEvent, exportUserLog },
       ),
-    ).rejects.toBeInstanceOf(ProjectFileGuidanceError);
+    ).rejects.toThrow(
+      "Um log tecnico foi salvo em C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log.",
+    );
 
     expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();
     expect(logEvent).toHaveBeenCalled();
+    expect(exportUserLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps guided fallback when desktop log export is unavailable", async () => {
+    const convertMppToXml = vi
+      .fn()
+      .mockRejectedValue(new MPPConversionError("Nao foi possivel processar o arquivo .mpp."));
+    const validateFile = vi.fn().mockResolvedValue({
+      extension: ".mpp",
+      mimeType: "application/vnd.ms-project",
+      sizeBytes: 1024,
+    });
+    const exportUserLog = vi.fn<() => Promise<string | null>>().mockResolvedValue(null);
+
+    await expect(
+      processProjectFile(
+        {
+          filePath: "D:\\Projeto.mpp",
+        },
+        convertMppToXml,
+        validateFile,
+        undefined,
+        { exportUserLog },
+      ),
+    ).rejects.toThrow(
+      "Nao foi possivel processar este arquivo diretamente. Algumas versoes do MS Project podem gerar variacoes no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.",
+    );
+
+    expect(exportUserLog).toHaveBeenCalledTimes(1);
   });
 
   it("fails explicitly when the selected file is unsafe before conversion starts", async () => {
