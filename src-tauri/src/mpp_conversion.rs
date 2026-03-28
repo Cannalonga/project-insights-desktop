@@ -14,6 +14,7 @@ const CONVERTER_RELATIVE_PATH: &str = "mpp-converter/mpp-converter.jar";
 const MAX_INPUT_FILE_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_XML_OUTPUT_BYTES: u64 = 25 * 1024 * 1024;
 const OLE_SIGNATURE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+const JAVA_RELATIVE_PATH: &str = "mpp-converter/runtime/bin/java.exe";
 
 #[tauri::command]
 pub fn convert_mpp_to_mspdi(app: AppHandle, input_path: String) -> Result<String, String> {
@@ -309,69 +310,77 @@ fn validate_input_mpp_file(input: &Path) -> Result<(), String> {
 fn resolve_converter_jar(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("CANNACONVERTER_MPP_CONVERTER_JAR") {
         let jar = PathBuf::from(path);
-        log_processing_event(
-            app,
-            "info",
-            "mpp_conversion_resource_candidate",
-            resource_candidate_payload("converterJar", "env", &jar),
-        );
-        if jar.exists() && jar.is_file() {
-            log_processing_event(
-                app,
-                "info",
-                "mpp_conversion_resource_selected",
-                json!({
-                    "resource": "converterJar",
-                    "source": "env",
-                    "path": jar.display().to_string(),
-                }),
-            );
-            return Ok(jar);
+        if let Some(selected) = log_and_select_resource(app, "converterJar", "env", jar) {
+            return Ok(selected);
         }
     }
 
     if let Some(resource_path) = app.path_resolver().resolve_resource(CONVERTER_RELATIVE_PATH) {
-        log_processing_event(
+        if let Some(selected) = log_and_select_resource(
             app,
-            "info",
-            "mpp_conversion_resource_candidate",
-            resource_candidate_payload("converterJar", "bundle-resource", &resource_path),
-        );
-        if resource_path.exists() && resource_path.is_file() {
-            log_processing_event(
+            "converterJar",
+            "bundle-resource",
+            resource_path,
+        ) {
+            return Ok(selected);
+        }
+    }
+
+    if let Some(resource_dir) = app.path_resolver().resource_dir() {
+        let bundled_subdir = resource_dir.join("resources").join(CONVERTER_RELATIVE_PATH);
+        if let Some(selected) = log_and_select_resource(
+            app,
+            "converterJar",
+            "resource-dir-plus-resources",
+            bundled_subdir,
+        ) {
+            return Ok(selected);
+        }
+
+        let bundled_direct = resource_dir.join(CONVERTER_RELATIVE_PATH);
+        if let Some(selected) = log_and_select_resource(
+            app,
+            "converterJar",
+            "resource-dir-direct",
+            bundled_direct,
+        ) {
+            return Ok(selected);
+        }
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let exe_resources = exe_dir.join("resources").join(CONVERTER_RELATIVE_PATH);
+            if let Some(selected) = log_and_select_resource(
                 app,
-                "info",
-                "mpp_conversion_resource_selected",
-                json!({
-                    "resource": "converterJar",
-                    "source": "bundle-resource",
-                    "path": resource_path.display().to_string(),
-                }),
-            );
-            return Ok(resource_path);
+                "converterJar",
+                "exe-dir-plus-resources",
+                exe_resources,
+            ) {
+                return Ok(selected);
+            }
+
+            let exe_direct = exe_dir.join(CONVERTER_RELATIVE_PATH);
+            if let Some(selected) = log_and_select_resource(
+                app,
+                "converterJar",
+                "exe-dir-direct",
+                exe_direct,
+            ) {
+                return Ok(selected);
+            }
         }
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let dev_resource_path = manifest_dir.join("resources").join("mpp-converter").join("mpp-converter.jar");
-    log_processing_event(
+    if let Some(selected) = log_and_select_resource(
         app,
-        "info",
-        "mpp_conversion_resource_candidate",
-        resource_candidate_payload("converterJar", "dev-resource", &dev_resource_path),
-    );
-    if dev_resource_path.exists() && dev_resource_path.is_file() {
-        log_processing_event(
-            app,
-            "info",
-            "mpp_conversion_resource_selected",
-            json!({
-                "resource": "converterJar",
-                "source": "dev-resource",
-                "path": dev_resource_path.display().to_string(),
-            }),
-        );
-        return Ok(dev_resource_path);
+        "converterJar",
+        "dev-resource",
+        dev_resource_path,
+    ) {
+        return Ok(selected);
     }
 
     log_processing_event(
@@ -392,49 +401,65 @@ fn resolve_converter_jar(app: &AppHandle) -> Result<PathBuf, String> {
 fn resolve_java_bin(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("CANNACONVERTER_JAVA_BIN") {
         let java_bin = PathBuf::from(path);
-        log_processing_event(
-            app,
-            "info",
-            "mpp_conversion_resource_candidate",
-            resource_candidate_payload("javaBin", "env", &java_bin),
-        );
-        if java_bin.exists() && java_bin.is_file() {
-            log_processing_event(
-                app,
-                "info",
-                "mpp_conversion_resource_selected",
-                json!({
-                    "resource": "javaBin",
-                    "source": "env",
-                    "path": java_bin.display().to_string(),
-                }),
-            );
-            return Ok(java_bin);
+        if let Some(selected) = log_and_select_resource(app, "javaBin", "env", java_bin) {
+            return Ok(selected);
         }
     }
 
-    if let Some(java_resource) = app
-        .path_resolver()
-        .resolve_resource("mpp-converter/runtime/bin/java.exe")
-    {
-        log_processing_event(
+    if let Some(java_resource) = app.path_resolver().resolve_resource(JAVA_RELATIVE_PATH) {
+        if let Some(selected) = log_and_select_resource(
             app,
-            "info",
-            "mpp_conversion_resource_candidate",
-            resource_candidate_payload("javaBin", "bundle-resource", &java_resource),
-        );
-        if java_resource.exists() && java_resource.is_file() {
-            log_processing_event(
+            "javaBin",
+            "bundle-resource",
+            java_resource,
+        ) {
+            return Ok(selected);
+        }
+    }
+
+    if let Some(resource_dir) = app.path_resolver().resource_dir() {
+        let bundled_subdir = resource_dir.join("resources").join(JAVA_RELATIVE_PATH);
+        if let Some(selected) = log_and_select_resource(
+            app,
+            "javaBin",
+            "resource-dir-plus-resources",
+            bundled_subdir,
+        ) {
+            return Ok(selected);
+        }
+
+        let bundled_direct = resource_dir.join(JAVA_RELATIVE_PATH);
+        if let Some(selected) = log_and_select_resource(
+            app,
+            "javaBin",
+            "resource-dir-direct",
+            bundled_direct,
+        ) {
+            return Ok(selected);
+        }
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let exe_resources = exe_dir.join("resources").join(JAVA_RELATIVE_PATH);
+            if let Some(selected) = log_and_select_resource(
                 app,
-                "info",
-                "mpp_conversion_resource_selected",
-                json!({
-                    "resource": "javaBin",
-                    "source": "bundle-resource",
-                    "path": java_resource.display().to_string(),
-                }),
-            );
-            return Ok(java_resource);
+                "javaBin",
+                "exe-dir-plus-resources",
+                exe_resources,
+            ) {
+                return Ok(selected);
+            }
+
+            let exe_direct = exe_dir.join(JAVA_RELATIVE_PATH);
+            if let Some(selected) = log_and_select_resource(
+                app,
+                "javaBin",
+                "exe-dir-direct",
+                exe_direct,
+            ) {
+                return Ok(selected);
+            }
         }
     }
 
@@ -620,6 +645,36 @@ fn log_processing_event(app: &AppHandle, level: &str, event: &str, payload: serd
     let serialized = serde_json::to_string(&entry)
         .unwrap_or_else(|_| format!("{{\"timestamp\":\"{}\",\"level\":\"error\",\"event\":\"log_serialization_failed\"}}", current_timestamp()));
     let _ = append_processing_log_line(app, &serialized);
+}
+
+fn log_and_select_resource(
+    app: &AppHandle,
+    resource: &str,
+    source: &str,
+    path: PathBuf,
+) -> Option<PathBuf> {
+    log_processing_event(
+        app,
+        "info",
+        "mpp_conversion_resource_candidate",
+        resource_candidate_payload(resource, source, &path),
+    );
+
+    if path.exists() && path.is_file() {
+        log_processing_event(
+            app,
+            "info",
+            "mpp_conversion_resource_selected",
+            json!({
+                "resource": resource,
+                "source": source,
+                "path": path.display().to_string(),
+            }),
+        );
+        return Some(path);
+    }
+
+    None
 }
 
 fn resource_candidate_payload(resource: &str, source: &str, path: &Path) -> serde_json::Value {
