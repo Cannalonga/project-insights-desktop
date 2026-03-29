@@ -13,11 +13,13 @@ import { buildDiagnostics } from "../diagnostics/build-diagnostics";
 import type { ProjectInsights } from "../insights/build-project-insights";
 import { buildProjectInsights } from "../insights/build-project-insights";
 import type { Project } from "../model/project";
+import type { AnalysisReliability } from "../reliability/build-analysis-reliability";
 import type { ScheduleStatus } from "../schedule/build-schedule-status";
 import type { ProjectScore } from "../score/build-project-score";
 import { buildProjectScore } from "../score/build-project-score";
 import { validateProject } from "../validation/validate-project";
 import type { ProjectWeightModel } from "../weight/build-project-weight-model";
+import { stringifyProjectInsightsExport } from "./build-project-insights-export";
 
 type ExportPowerBIPackageInput = {
   generatedAt: string;
@@ -29,6 +31,7 @@ type ExportPowerBIPackageInput = {
   compensationAnalysis: OperationalCompensationAnalysis;
   compensationByDiscipline: OperationalCompensationDiscipline[];
   scheduleStatus?: ScheduleStatus;
+  analysisReliability?: AnalysisReliability;
   gapVsCompensation?: GapVsCompensation;
   comparison?: ProjectComparison;
 };
@@ -38,7 +41,13 @@ export type PowerBIPackage = {
   snapshotId: string;
   manifest: string;
   files: Array<{
-    fileName: "fact_tasks.csv" | "fact_disciplines.csv" | "fact_snapshots.csv" | "fact_compensation.csv" | "manifest.json";
+    fileName:
+      | "fact_tasks.csv"
+      | "fact_disciplines.csv"
+      | "fact_snapshots.csv"
+      | "fact_compensation.csv"
+      | "project_insights_export.json"
+      | "manifest.json";
     content: string;
   }>;
 };
@@ -611,6 +620,7 @@ export function buildPowerBIPackage(input: ExportPowerBIPackageInput): PowerBIPa
     compensationAnalysis,
     compensationByDiscipline,
     scheduleStatus,
+    analysisReliability,
     gapVsCompensation,
   } = input;
 
@@ -862,6 +872,7 @@ export function buildPowerBIPackage(input: ExportPowerBIPackageInput): PowerBIPa
     project_id: projectId,
     project_name: resolvedProjectName,
     snapshot_id: snapshotId,
+    primary_machine_file: "project_insights_export.json",
     percent_scale: "0-100",
     csv_delimiter: ";",
     decimal_separator: ",",
@@ -877,16 +888,35 @@ export function buildPowerBIPackage(input: ExportPowerBIPackageInput): PowerBIPa
       discipline_snapshot_id: "fact_tasks.discipline_snapshot_id <-> fact_disciplines.discipline_snapshot_id",
     },
     files_generated: [
+      "project_insights_export.json",
       "fact_tasks.csv",
       "fact_disciplines.csv",
       "fact_snapshots.csv",
       "fact_compensation.csv",
       "manifest.json",
     ],
-    version: "1.1",
+    version: "2.0",
   };
 
+  const projectInsightsExportJson = stringifyProjectInsightsExport({
+    generatedAt,
+    project,
+    insights,
+    score,
+    disciplines,
+    weightModel,
+    compensationAnalysis,
+    compensationByDiscipline,
+    scheduleStatus,
+    analysisReliability,
+    gapVsCompensation,
+  });
+
   const files: PowerBIPackage["files"] = [
+    {
+      fileName: "project_insights_export.json",
+      content: projectInsightsExportJson,
+    },
     {
       fileName: "fact_tasks.csv",
       content: [FACT_TASKS_COLUMNS.join(CSV_DELIMITER), ...factTasksRows].join("\n"),

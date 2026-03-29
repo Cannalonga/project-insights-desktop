@@ -316,7 +316,7 @@ const scheduleStatus: ScheduleStatus = {
 };
 
 describe("buildPowerBIPackage", () => {
-  it("generates the 4 fact files and manifest with stable keys", () => {
+  it("generates the machine-first json, csv facts and manifest with stable keys", () => {
     const powerBIPackage = buildPowerBIPackage({
       generatedAt: "2026-03-26T10:00:00.000Z",
       project,
@@ -337,6 +337,7 @@ describe("buildPowerBIPackage", () => {
     });
 
     expect(powerBIPackage.files.map((file) => file.fileName)).toEqual([
+      "project_insights_export.json",
       "fact_tasks.csv",
       "fact_disciplines.csv",
       "fact_snapshots.csv",
@@ -500,6 +501,7 @@ describe("buildPowerBIPackage", () => {
 
     const tasksCsv = powerBIPackage.files.find((file) => file.fileName === "fact_tasks.csv")!.content;
     const compensationCsv = powerBIPackage.files.find((file) => file.fileName === "fact_compensation.csv")!.content;
+    const machineJson = powerBIPackage.files.find((file) => file.fileName === "project_insights_export.json")!.content;
     const manifest = powerBIPackage.files.find((file) => file.fileName === "manifest.json")!.content;
 
     const taskRow = getRowByColumnValue(tasksCsv, "task_id", "t1");
@@ -536,10 +538,13 @@ describe("buildPowerBIPackage", () => {
     expect(compensationRow.has_actual_dates).toBe("true");
     expect(compensationRow.delay_days).toBe("10,17");
     expect(compensationRow.impact_rank).toBe("1");
+    expect(machineJson).toContain('"schema_version": "2.0.0"');
+    expect(machineJson).toContain('"package_type": "project_insights_export"');
     expect(manifest).toContain('"percent_scale": "0-100"');
+    expect(manifest).toContain('"primary_machine_file": "project_insights_export.json"');
     expect(manifest).toContain('"fact_disciplines": "one row per discipline per snapshot"');
     expect(manifest).toContain('"discipline_snapshot_id": "fact_tasks.discipline_snapshot_id <-> fact_disciplines.discipline_snapshot_id"');
-    expect(manifest).toContain('"version": "1.1"');
+    expect(manifest).toContain('"version": "2.0"');
     expect(manifest).not.toContain("%");
   });
 

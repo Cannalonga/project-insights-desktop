@@ -13,6 +13,7 @@ type ResultPanelProps = {
 };
 
 const POWER_BI_FILES = [
+  "project_insights_export.json",
   "fact_tasks.csv",
   "fact_disciplines.csv",
   "fact_snapshots.csv",
@@ -91,6 +92,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
         compensationAnalysis: currentResult.compensationAnalysis,
         compensationByDiscipline: currentResult.compensationByDiscipline,
         scheduleStatus: currentResult.scheduleStatus,
+        analysisReliability: currentResult.analysisReliability,
         gapVsCompensation: currentResult.gapVsCompensation,
         comparison: currentResult.comparison,
       });

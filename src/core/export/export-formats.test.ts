@@ -298,28 +298,75 @@ describe("export formats", () => {
   });
 
   it("exports enriched JSON with diagnostics and insights", () => {
-    const json = JSON.parse(exportToJSON(project, diagnostics, insights, weightModel, sCurve));
+    const json = JSON.parse(
+      exportToJSON({
+        generatedAt: "2026-03-26T10:00:00.000Z",
+        project,
+        insights,
+        score,
+        disciplines,
+        weightModel,
+        compensationAnalysis: {
+          topTasks: [
+            {
+              taskId: "1",
+              name: "Task 1",
+              disciplineName: "Disciplina A",
+              remainingNormalizedValue: 750000,
+              impactPercent: 75,
+              progressPercent: 25,
+            },
+          ],
+          potential: {
+            top3ImpactPercent: 75,
+            top5ImpactPercent: 75,
+            message: "Executar as principais tarefas pode gerar ate 75% de avanco potencial no projeto.",
+          },
+        },
+        compensationByDiscipline: [
+          {
+            disciplineName: "Disciplina A",
+            totalRemainingValue: 750000,
+            impactPercent: 75,
+            top3Tasks: [],
+            top3ImpactPercent: 75,
+          },
+        ],
+        disciplineProgress,
+        sCurve,
+        scheduleStatus,
+        analysisReliability,
+      }),
+    );
 
     expect(json).toMatchObject({
-      project: { id: "project-1", name: "Projeto Teste" },
-      tasks: [{ id: "1", name: "Task 1" }],
-      resources: [{ id: "r1", name: "Equipe" }],
-      diagnostics: {
-        summary: { error: 0, warning: 1, info: 0 },
+      schema_version: "2.0.0",
+      package_type: "project_insights_export",
+      project: {
+        project_id: "project-1",
+        project_name: "Projeto Teste",
       },
-      insights: {
-        summary: { status: "atencao" },
+      conventions: {
+        percent_scale: "0_100",
+        decimal_format: "dot",
       },
-      weightModel: {
-        normalizedProjectValue: 1000000,
-        progressWeightedPercent: 25,
-      },
-      sCurve: {
-        scopeLabel: "Projeto completo",
-        timelineGranularity: "weekly",
+      snapshot: {
+        project_status_code: "PROJECT_ATTENTION",
+        schedule_status_code: "ATTENTION",
+        data_confidence_code: "MODERATE",
+        project_score: 78,
       },
     });
-    expect(json.diagnostics.items).toHaveLength(1);
+    expect(json.disciplines).toHaveLength(1);
+    expect(json.tasks[0]).toMatchObject({
+      task_id: "1",
+      task_type: "TASK",
+      progress_source_code: "PERCENT_COMPLETE",
+    });
+    expect(json.compensation[0]).toMatchObject({
+      task_id: "1",
+      priority_rank: 1,
+    });
   });
 
   it("keeps the legacy CSV builders available internally", () => {
@@ -443,10 +490,12 @@ describe("export formats", () => {
         },
       ],
       scheduleStatus,
+      analysisReliability,
     });
 
-    expect(powerBIPackage.files).toHaveLength(5);
-    expect(powerBIPackage.files[0]?.fileName).toBe("fact_tasks.csv");
+    expect(powerBIPackage.files).toHaveLength(6);
+    expect(powerBIPackage.files[0]?.fileName).toBe("project_insights_export.json");
+    expect(powerBIPackage.files.map((file) => file.fileName)).toContain("project_insights_export.json");
     expect(powerBIPackage.files.map((file) => file.fileName)).toContain("manifest.json");
     expect(powerBIPackage.files.find((file) => file.fileName === "fact_tasks.csv")?.content).not.toContain("%");
     expect(powerBIPackage.files.find((file) => file.fileName === "fact_tasks.csv")?.content).toContain("project_id;snapshot_id;task_snapshot_id");

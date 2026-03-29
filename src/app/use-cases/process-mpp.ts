@@ -136,7 +136,20 @@ export function processMPP(input: ProcessInput): ProcessResult {
     compensationByDiscipline,
   });
 
-  const json = exportToJSON(model, diagnostics, insights, weightModel, sCurve);
+  const json = exportToJSON({
+    generatedAt,
+    project: model,
+    insights,
+    score,
+    disciplines,
+    weightModel,
+    compensationAnalysis,
+    compensationByDiscipline,
+    disciplineProgress,
+    sCurve,
+    scheduleStatus,
+    analysisReliability,
+  });
   const structuredXml = exportToXML({
     generatedAt,
     project: model,
