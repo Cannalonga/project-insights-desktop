@@ -2,7 +2,9 @@ import { open, save } from "@tauri-apps/api/dialog";
 import { writeTextFile } from "@tauri-apps/api/fs";
 import { useState } from "react";
 
+import { buildExecutivePdfReportForScope } from "../../app/use-cases/build-executive-pdf-report-scope";
 import { buildExecutiveReportForScope } from "../../app/use-cases/build-executive-report-scope";
+import { exportExecutivePdf } from "../../app/use-cases/export-executive-pdf";
 import { buildPowerBIPackage } from "../../core/export/export-power-bi-package";
 import type { PresentationMode } from "../types/presentation-mode";
 import type { ProcessResult } from "../types/process-result";
@@ -22,10 +24,11 @@ const POWER_BI_FILES = [
 ];
 
 const AVAILABLE_OUTPUTS = [
-  "Relat√≥rio HTML",
+  "RelatÛrio executivo (PDF)",
+  "RelatÛrio HTML",
   "CSV consolidado",
   "XML estruturado",
-  "JSON anal√≠tico",
+  "JSON analÌtico",
   "Pacote Power BI",
 ];
 
@@ -54,20 +57,39 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       await writeTextFile(filePath, content);
       setExportMessage(`${name} salvo em ${filePath}`);
     } catch (err) {
-      setExportMessage(err instanceof Error ? err.message : `N√£o foi poss√≠vel salvar ${name.toLowerCase()}.`);
+      setExportMessage(err instanceof Error ? err.message : `N„o foi possÌvel salvar ${name.toLowerCase()}.`);
     }
   }
 
-  async function handleSaveExecutiveReport(): Promise<void> {
-    const reportHtml =
-      selectedScope === "global"
-        ? buildExecutiveReportForScope(currentResult, { kind: "global" })
-        : buildExecutiveReportForScope(currentResult, {
-            kind: "discipline",
-            outlineNumber: selectedScope,
-          });
+  function resolveReportScope() {
+    return selectedScope === "global"
+      ? ({ kind: "global" } as const)
+      : ({ kind: "discipline", outlineNumber: selectedScope } as const);
+  }
 
-    await saveTextExport("relat√≥rio-executivo.html", "Relat√≥rio executivo", reportHtml, "html");
+  async function handleSaveExecutiveReportHtml(): Promise<void> {
+    const reportHtml = buildExecutiveReportForScope(currentResult, resolveReportScope());
+    await saveTextExport("relatÛrio-executivo.html", "RelatÛrio executivo", reportHtml, "html");
+  }
+
+  async function handleSaveExecutiveReportPdf(): Promise<void> {
+    try {
+      const filePath = await save({
+        title: "RelatÛrio executivo (PDF)",
+        defaultPath: "relatorio-executivo.pdf",
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+
+      if (!filePath) {
+        return;
+      }
+
+      const reportHtml = buildExecutivePdfReportForScope(currentResult, resolveReportScope());
+      await exportExecutivePdf(reportHtml, filePath);
+      setExportMessage(`RelatÛrio executivo (PDF) salvo em ${filePath}`);
+    } catch (err) {
+      setExportMessage(err instanceof Error ? err.message : "N„o foi possÌvel gerar o relatÛrio executivo em PDF.");
+    }
   }
 
   async function handleSavePowerBIPackage(): Promise<void> {
@@ -75,7 +97,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       const directoryPath = await open({
         directory: true,
         multiple: false,
-        title: "Selecionar pasta para exporta√ß√£o Power BI",
+        title: "Selecionar pasta para exportaÁ„o Power BI",
       });
 
       if (!directoryPath || Array.isArray(directoryPath)) {
@@ -103,7 +125,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
 
       setExportMessage(`Pacote Power BI salvo em ${directoryPath}`);
     } catch (err) {
-      setExportMessage(err instanceof Error ? err.message : "N√£o foi poss√≠vel salvar o pacote Power BI.");
+      setExportMessage(err instanceof Error ? err.message : "N„o foi possÌvel salvar o pacote Power BI.");
     }
   }
 
@@ -111,8 +133,8 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
     <section className="panel-card compact export-panel">
       <div className="panel-header export-panel-header">
         <div>
-          <p className="panel-kicker">Sa√≠da t√©cnica</p>
-          <h2 className="panel-title">Exporta√ß√£o externa</h2>
+          <p className="panel-kicker">SaÌda tÈcnica</p>
+          <h2 className="panel-title">ExportaÁ„o externa</h2>
         </div>
         <span className="comparison-chip">
           <strong>Projeto processado</strong> {currentResult.model.name}
@@ -127,11 +149,14 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
             <span className="export-chip">
               <strong>.mpp</strong>
             </span>
+            <span className="export-chip">
+              <strong>.xml</strong>
+            </span>
           </div>
         </article>
 
         <article className="export-section-card">
-          <p className="panel-kicker">Sa√≠das dispon√≠veis</p>
+          <p className="panel-kicker">SaÌdas disponÌveis</p>
           <h3 className="support-chart-title">Formatos gerados</h3>
           <div className="export-chip-list">
             {AVAILABLE_OUTPUTS.map((output) => (
@@ -144,7 +169,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
 
         <article className="export-section-card export-section-card-wide">
           <p className="panel-kicker">Pacote Power BI</p>
-          <h3 className="support-chart-title">Arquivos anal√≠ticos</h3>
+          <h3 className="support-chart-title">Arquivos analÌticos</h3>
           <ul className="clean-list export-file-list">
             {POWER_BI_FILES.map((fileName) => (
               <li key={fileName}>
@@ -161,7 +186,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
           <strong>{currentResult.model.name}</strong>
         </div>
         <div className="metric-card">
-          <span className="metric-label">Escopo do relat√≥rio</span>
+          <span className="metric-label">Escopo do relatÛrio</span>
           <strong>{selectedScope === "global" ? "Projeto completo" : "Disciplina selecionada"}</strong>
         </div>
         <div className="metric-card">
@@ -173,14 +198,14 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       <section className="export-actions-card">
         <div className="panel-header" style={{ marginBottom: 14 }}>
           <div>
-            <p className="panel-kicker">Relat√≥rio executivo</p>
-            <h3 className="support-chart-title">Escolha a √°rea e gere o HTML</h3>
+            <p className="panel-kicker">RelatÛrio executivo</p>
+            <h3 className="support-chart-title">Escolha a ·rea e gere o PDF</h3>
           </div>
         </div>
 
         <div className="form-row export-form-row">
           <label htmlFor="executive-report-scope" className="metric-label">
-            √Årea do relat√≥rio
+            ¡rea do relatÛrio
           </label>
           <select
             id="executive-report-scope"
@@ -195,8 +220,11 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
               </option>
             ))}
           </select>
-          <button type="button" className="secondary-button" onClick={() => void handleSaveExecutiveReport()}>
-            Gerar relat√≥rio executivo
+          <button type="button" className="secondary-button" onClick={() => void handleSaveExecutiveReportPdf()}>
+            Gerar relatÛrio executivo (PDF)
+          </button>
+          <button type="button" className="ghost-button" onClick={() => void handleSaveExecutiveReportHtml()}>
+            Salvar HTML
           </button>
         </div>
       </section>
@@ -204,7 +232,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       <section className="export-actions-card">
         <div className="panel-header" style={{ marginBottom: 14 }}>
           <div>
-            <p className="panel-kicker">Exporta√ß√£o t√©cnica</p>
+            <p className="panel-kicker">ExportaÁ„o tÈcnica</p>
             <h3 className="support-chart-title">Arquivos para uso externo</h3>
           </div>
         </div>
@@ -230,9 +258,9 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
           <button
             type="button"
             className="secondary-button"
-            onClick={() => void saveTextExport("cronograma-anal√≠tico.json", "JSON anal√≠tico", currentResult.json, "json")}
+            onClick={() => void saveTextExport("cronograma-analÌtico.json", "JSON analÌtico", currentResult.json, "json")}
           >
-            Exportar JSON anal√≠tico
+            Exportar JSON analÌtico
           </button>
         </div>
       </section>

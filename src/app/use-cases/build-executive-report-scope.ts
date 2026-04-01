@@ -13,7 +13,10 @@ import {
 import { buildProjectInsights } from "../../core/insights/build-project-insights";
 import type { Project } from "../../core/model/project";
 import { buildAnalysisReliability } from "../../core/reliability/build-analysis-reliability";
-import { buildExecutiveReport } from "../../core/report/build-executive-report";
+import {
+  buildExecutiveReport,
+  type ExecutiveReportInput,
+} from "../../core/report/build-executive-report";
 import { buildDisciplineProgress } from "../../core/progress/build-discipline-progress";
 import { buildSCurve } from "../../core/s-curve/build-s-curve";
 import { buildScheduleStatus } from "../../core/schedule/build-schedule-status";
@@ -117,16 +120,16 @@ function buildScopedAnalytics(
   };
 }
 
-export function buildExecutiveReportForScope(
+export function resolveExecutiveReportInputForScope(
   result: ProcessResult,
   scope: ExecutiveReportScope,
-): string {
+): ExecutiveReportInput {
   if (scope.kind === "global") {
     const dominantOutlineNumber = result.weightModel.disciplineWeights
       .slice()
       .sort((left, right) => right.totalNormalizedValue - left.totalNormalizedValue)[0]?.outlineNumber;
 
-    return buildExecutiveReport({
+    return {
       project: result.model,
       projectDisplayName: resolveProjectDisplayName(result.model, result.disciplines, dominantOutlineNumber),
       analysisAreaLabel: "Projeto completo",
@@ -144,12 +147,12 @@ export function buildExecutiveReportForScope(
       compensationAnalysis: result.compensationAnalysis,
       compensationByDiscipline: result.compensationByDiscipline,
       gapVsCompensation: result.gapVsCompensation,
-    });
+    };
   }
 
   const discipline = result.disciplines.find((item) => item.outlineNumber === scope.outlineNumber);
   if (!discipline) {
-    return buildExecutiveReportForScope(result, { kind: "global" });
+    return resolveExecutiveReportInputForScope(result, { kind: "global" });
   }
 
   const scopedProject = buildScopedProjectByOutlineNumber(result.model, discipline.outlineNumber);
@@ -162,7 +165,7 @@ export function buildExecutiveReportForScope(
     result.generatedAt,
   );
 
-  return buildExecutiveReport({
+  return {
     project: scopedAnalytics.project,
     projectDisplayName: resolveProjectDisplayName(
       scopedAnalytics.project,
@@ -183,5 +186,12 @@ export function buildExecutiveReportForScope(
     analysisReliability: scopedAnalytics.analysisReliability,
     compensationAnalysis: scopedAnalytics.compensationAnalysis,
     compensationByDiscipline: scopedAnalytics.compensationByDiscipline,
-  });
+  };
+}
+
+export function buildExecutiveReportForScope(
+  result: ProcessResult,
+  scope: ExecutiveReportScope,
+): string {
+  return buildExecutiveReport(resolveExecutiveReportInputForScope(result, scope));
 }

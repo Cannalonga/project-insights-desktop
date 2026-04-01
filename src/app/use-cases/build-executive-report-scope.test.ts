@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProcessResult } from "./process-mpp";
 import { buildExecutiveReportForScope } from "./build-executive-report-scope";
+import { buildExecutivePdfReportForScope } from "./build-executive-pdf-report-scope";
 
 function createResult(): ProcessResult {
   return {
@@ -35,7 +36,7 @@ function createResult(): ProcessResult {
         },
         {
           id: "1.1",
-          name: "EscavaÃ§Ã£o",
+          name: "Escavação",
           startDate: "2026-03-01T08:00:00",
           endDate: "2026-03-10T17:00:00",
           percentComplete: 50,
@@ -59,7 +60,7 @@ function createResult(): ProcessResult {
         },
         {
           id: "2",
-          name: "MecÃ¢nica",
+          name: "Mecânica",
           startDate: "2026-03-01T08:00:00",
           endDate: "2026-03-30T17:00:00",
           percentComplete: 0,
@@ -107,7 +108,7 @@ function createResult(): ProcessResult {
       ],
       resources: [
         { id: "r1", name: "Equipe Civil", type: "work" },
-        { id: "r2", name: "Equipe MecÃ¢nica", type: "work" },
+        { id: "r2", name: "Equipe Mecânica", type: "work" },
       ],
       dependencies: [],
     },
@@ -334,11 +335,22 @@ describe("buildExecutiveReportForScope", () => {
     });
 
     expect(html).toContain(">Civil<");
-    expect(html).toContain("Ãrea do relatÃ³rio");
-    expect(html).toContain("EscavaÃ§Ã£o");
+    expect(html).toContain("Escavação");
     expect(html).not.toContain("Montagem");
-    expect(html).not.toContain("Gap vs compensaÃ§Ã£o");
+    expect(html).not.toContain("Gap vs compensação");
     expect(html).not.toContain("Diagnostics consolidados");
     expect(html).not.toContain("Sem nome");
   });
+
+  it("builds a compact PDF-oriented executive report without duplicating scope calculations", () => {
+    const html = buildExecutivePdfReportForScope(createResult(), {
+      kind: "global",
+    });
+
+    expect(html).toContain("RELATORIO EXECUTIVO");
+    expect(html).toContain("COMPENSACAO OPERACIONAL");
+    expect(html).toContain("DISCIPLINAS");
+    expect(html).not.toContain("Curva S");
+  });
 });
+
