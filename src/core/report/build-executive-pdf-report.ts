@@ -2,11 +2,10 @@ import type { ExecutiveAlert } from "../alerts/build-executive-alerts";
 import type { OperationalCompensationDiscipline } from "../compensation/build-operational-compensation";
 import type { GapVsCompensation } from "../compensation/build-gap-vs-compensation";
 import type { ProjectDiscipline } from "../disciplines/build-project-disciplines";
+import type { ProjectInsights } from "../insights/build-project-insights";
 import type { Project } from "../model/project";
 import { buildOperationalTaskViews } from "../operations/build-operational-task-views";
-import type { ProjectInsights } from "../insights/build-project-insights";
 import type { ScheduleStatus } from "../schedule/build-schedule-status";
-import type { ProjectScore } from "../score/build-project-score";
 import type { ProjectWeightModel } from "../weight/build-project-weight-model";
 import type { ExecutiveReportInput } from "./build-executive-report";
 
@@ -15,7 +14,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
@@ -90,6 +89,76 @@ function statusTone(status: string | undefined): string {
   return "critical";
 }
 
+function resolveProjectName(input: ExecutiveReportInput): string {
+  return input.projectDisplayName?.trim() || input.project.name || "Projeto sem identificacao";
+}
+
+function formatTaskDisplay(taskIdentifier: string | undefined, taskId: string, taskName: string): string {
+  const resolvedIdentifier = taskIdentifier?.trim() || `[ID:${taskId}]`;
+  return `${resolvedIdentifier} - ${taskName}`;
+}
+
+function buildGeneralSituation(input: ExecutiveReportInput): string {
+  const status = (input.scheduleStatus?.status ?? input.score.status).toUpperCase();
+  const gap = input.scheduleStatus?.gap;
+
+  if (status === "CRITICAL" || status === "ATRASADO" || (gap !== undefined && gap < -10)) {
+    return "O projeto apresenta desempenho abaixo do esperado, com sinais claros de perda de controle sobre o cronograma.";
+  }
+
+  if (status === "ATENCAO" || status === "ATENCAO" || status === "MODERATE" || (gap !== undefined && gap < 0)) {
+    return "O projeto opera em atencao e ja mostra sinais de pressao sobre prazo e execucao.";
+  }
+
+  return "O projeto segue controlado neste recorte, mas requer manutencao do ritmo para preservar o prazo.";
+}
+
+function buildExecutiveReading(input: ExecutiveReportInput): string {
+  const scheduleStatus = (input.scheduleStatus?.status ?? input.score.status).toUpperCase();
+  const remainingPercent = input.weightModel.normalizedProjectValue > 0
+    ? (input.weightModel.totalRemainingNormalizedValue / input.weightModel.normalizedProjectValue) * 100
+    : 0;
+
+  if (scheduleStatus === "CRITICAL" || scheduleStatus === "ATRASADO") {
+    return "Projeto em risco de agravamento. A execucao atual nao e suficiente para recuperar o cronograma e a intervencao imediata e necessaria.";
+  }
+
+  if (remainingPercent > 60) {
+    return "O projeto ainda concentra grande volume pendente e exige resposta rapida para evitar aumento do atraso.";
+  }
+
+  return "O projeto permanece operacionalmente viavel, mas depende de disciplina de execucao para evitar deterioracao do prazo.";
+}
+
+function rewriteAlertMessage(alert: ExecutiveAlert): string {
+  const message = alert.message.trim();
+  const lower = message.toLowerCase();
+  const disciplineMatch = message.match(/disciplina\s+([^,.]+)/i);
+  const disciplineName = disciplineMatch?.[1]?.trim();
+
+  if (lower.includes("atras")) {
+    return "O projeto apresenta deterioracao no cumprimento de prazo.";
+  }
+
+  if ((lower.includes("concentra") || lower.includes("impacto pendente") || lower.includes("valor pendente")) && disciplineName) {
+    return `A disciplina ${disciplineName} concentra a maior parte do impacto pendente e deve ser priorizada.`;
+  }
+
+  if (disciplineName && lower.includes("disciplina")) {
+    return `A disciplina ${disciplineName} exige prioridade operacional para evitar ampliacao do risco.`;
+  }
+
+  if (alert.severity === "critical") {
+    return "O projeto apresenta um risco executivo que exige resposta imediata.";
+  }
+
+  if (alert.severity === "warning") {
+    return "Ha sinal de pressao operacional que pode comprometer o desempenho do projeto.";
+  }
+
+  return message;
+}
+
 function renderAlerts(alerts: ExecutiveAlert[]): string {
   const topAlerts = alerts
     .slice()
@@ -97,7 +166,7 @@ function renderAlerts(alerts: ExecutiveAlert[]): string {
     .slice(0, 5);
 
   if (topAlerts.length === 0) {
-    return '<p class="muted">Nenhum alerta executivo relevante foi identificado neste recorte.</p>';
+    return '<p class="muted">Nao foram identificados riscos executivos relevantes neste recorte.</p>';
   }
 
   return `
@@ -107,7 +176,7 @@ function renderAlerts(alerts: ExecutiveAlert[]): string {
           (alert) => `
             <li>
               <span class="tag ${statusTone(alert.severity)}">[${severityTag(alert.severity)}]</span>
-              <span>${escapeHtml(alert.message)}</span>
+              <span>${escapeHtml(rewriteAlertMessage(alert))}</span>
             </li>
           `,
         )
@@ -118,6 +187,12 @@ function renderAlerts(alerts: ExecutiveAlert[]): string {
 
 function renderScheduleSummary(insights: ProjectInsights, scheduleStatus?: ScheduleStatus): string {
   const schedulePerformance = insights.schedulePerformance;
+  const tasksDelayed = schedulePerformance?.tasksDelayed ?? 0;
+  const averageDelay = schedulePerformance?.averageDelay ?? 0;
+  const maxDelay = schedulePerformance?.maxDelay ?? 0;
+  const interpretation = tasksDelayed > 0
+    ? "O volume de tarefas atrasadas ja indica perda de ritmo de execucao."
+    : "Nao ha acumulacao relevante de atraso nas tarefas lidas neste recorte.";
 
   return `
     <div class="metric-grid two">
@@ -127,42 +202,81 @@ function renderScheduleSummary(insights: ProjectInsights, scheduleStatus?: Sched
       </article>
       <article class="metric-card">
         <span>Tasks atrasadas</span>
-        <strong>${schedulePerformance ? formatNumber(schedulePerformance.tasksDelayed, 0) : "n/a"}</strong>
+        <strong>${schedulePerformance ? formatNumber(tasksDelayed, 0) : "n/a"}</strong>
       </article>
       <article class="metric-card">
         <span>Atraso medio</span>
-        <strong>${schedulePerformance ? `${formatNumber(schedulePerformance.averageDelay)} dias` : "n/a"}</strong>
+        <strong>${schedulePerformance ? `${formatNumber(averageDelay)} dias` : "n/a"}</strong>
       </article>
       <article class="metric-card">
         <span>Maior atraso</span>
-        <strong>${schedulePerformance ? `${formatNumber(schedulePerformance.maxDelay)} dias` : "n/a"}</strong>
+        <strong>${schedulePerformance ? `${formatNumber(maxDelay)} dias` : "n/a"}</strong>
       </article>
     </div>
-    ${schedulePerformance?.message ? `<p class="support-copy">${escapeHtml(schedulePerformance.message)}</p>` : ""}
+    <p class="support-copy">${escapeHtml(interpretation)}</p>
   `;
 }
 
 function renderWeightSummary(weightModel: ProjectWeightModel): string {
+  const currentPercent = weightModel.progressWeightedPercent;
+  const remainingPercent = Math.max(0, 100 - currentPercent);
+  const interpretation = remainingPercent > 60
+    ? "Grande parte do escopo ainda permanece pendente, com execucao abaixo do necessario para recuperacao de prazo."
+    : remainingPercent > 30
+      ? "O projeto ainda possui volume relevante de escopo pendente e exige manutencao do ritmo de execucao."
+      : "A maior parte do escopo ja foi executada, mas o saldo remanescente ainda exige disciplina operacional."
+
   return `
-    <div class="metric-grid four">
+    <div class="metric-grid two">
       <article class="metric-card">
-        <span>Valor total normalizado</span>
-        <strong>${formatNumber(weightModel.normalizedProjectValue, 0)}</strong>
+        <span>Avanco atual</span>
+        <strong>${formatPercent(currentPercent)}</strong>
       </article>
       <article class="metric-card">
-        <span>Valor executado</span>
-        <strong>${formatNumber(weightModel.totalEarnedNormalizedValue, 0)}</strong>
-      </article>
-      <article class="metric-card">
-        <span>Valor pendente</span>
-        <strong>${formatNumber(weightModel.totalRemainingNormalizedValue, 0)}</strong>
-      </article>
-      <article class="metric-card">
-        <span>Avanco ponderado</span>
-        <strong>${formatPercent(weightModel.progressWeightedPercent)}</strong>
+        <span>Restante a executar</span>
+        <strong>${formatPercent(remainingPercent)}</strong>
       </article>
     </div>
-    <p class="footnote">Escala normalizada para analise de impacto. Nao representa custo real.</p>
+    <p class="support-copy">${escapeHtml(interpretation)}</p>
+    <p class="footnote">Distribuicao baseada no peso relativo das tarefas no projeto.</p>
+  `;
+}
+
+function renderCriticalDiscipline(
+  disciplines: ProjectDiscipline[],
+  compensationByDiscipline: OperationalCompensationDiscipline[],
+): string {
+  if (disciplines.length === 0 || compensationByDiscipline.length === 0) {
+    return '<p class="muted">Nao foi possivel destacar disciplina prioritaria neste recorte.</p>';
+  }
+
+  const impactMap = new Map(compensationByDiscipline.map((item) => [item.disciplineName, item]));
+  const critical = disciplines
+    .slice()
+    .sort((left, right) => (impactMap.get(right.name)?.impactPercent ?? 0) - (impactMap.get(left.name)?.impactPercent ?? 0))[0];
+
+  if (!critical) {
+    return '<p class="muted">Nao foi possivel destacar disciplina prioritaria neste recorte.</p>';
+  }
+
+  const impact = impactMap.get(critical.name);
+
+  return `
+    <article class="highlight-card subtle">
+      <p class="section-kicker">FOCO CRITICO</p>
+      <h3>${escapeHtml(critical.name)}</h3>
+      <p class="highlight-copy small">A disciplina ${escapeHtml(critical.name)} concentra a maior parte do impacto do projeto e deve ser tratada como prioridade operacional imediata.</p>
+      <div class="metric-grid two compact">
+        <article class="metric-card">
+          <span>Tipo</span>
+          <strong>${escapeHtml(critical.disciplineType ?? "OUTRO")}</strong>
+        </article>
+        <article class="metric-card">
+          <span>Impacto potencial</span>
+          <strong>${formatPercent(impact?.impactPercent ?? 0)}</strong>
+        </article>
+      </div>
+    </article>
   `;
 }
 
@@ -222,7 +336,6 @@ function renderDisciplines(
 }
 
 function renderImmediateAction(project: Project, weightModel: ProjectWeightModel, generatedAt: string): string {
-  const taskWeights = new Map(weightModel.taskWeights.map((task) => [task.taskId, task]));
   const topTask = buildOperationalTaskViews(weightModel, project, generatedAt, 1)[0];
 
   if (!topTask) {
@@ -230,7 +343,6 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
   }
 
   const sourceTask = project.tasks.find((task) => task.id === topTask.taskId);
-  const sourceWeight = taskWeights.get(topTask.taskId);
   const plannedStart = formatDate(sourceTask?.startDate ?? "");
   const plannedFinish = formatDate(sourceTask?.endDate ?? "");
   const actualStart = formatDate(sourceTask?.actualStartDate ?? "");
@@ -241,23 +353,27 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
     actualStart ? `Inicio real ${actualStart}` : null,
     actualFinish ? `Fim real ${actualFinish}` : null,
   ].filter(Boolean);
+  const reason = `${topTask.disciplineName ?? "A task"} concentra uma das maiores alavancas de avanco imediato no projeto.`;
+  const risk = `Se essa frente nao avancar, o projeto tende a manter pressao sobre prazo e a reduzir sua capacidade de recuperacao.`;
+  const taskDisplay = formatTaskDisplay(topTask.taskIdentifier, topTask.taskId, topTask.name);
 
   return `
     <article class="highlight-card">
-      <p class="section-kicker">PONTO CRITICO DE ACAO IMEDIATA</p>
-      <h3>${escapeHtml(topTask.name)}</h3>
+      <p class="section-kicker">ACAO PRIORITARIA</p>
+      <h3>Se voce fizer apenas uma coisa agora:</h3>
+      <p class="priority-task">${escapeHtml(taskDisplay)}</p>
       <div class="metric-grid two compact">
         <article class="metric-card">
           <span>Disciplina</span>
           <strong>${escapeHtml(topTask.disciplineName ?? "n/a")}</strong>
         </article>
         <article class="metric-card">
-          <span>Impacto</span>
+          <span>Impacto no projeto</span>
           <strong>${formatPercent(topTask.impactPercent)}</strong>
         </article>
         <article class="metric-card">
-          <span>Valor pendente</span>
-          <strong>${formatPercent(topTask.impactPercent)}</strong>
+          <span>Execucao atual</span>
+          <strong>${formatPercent(topTask.realPercent)}</strong>
         </article>
         <article class="metric-card">
           <span>Status operacional</span>
@@ -265,6 +381,8 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
         </article>
       </div>
       ${scheduleItems.length > 0 ? `<p class="support-copy">${escapeHtml(scheduleItems.join(" | "))}</p>` : ""}
+      <p><strong>Motivo:</strong> ${escapeHtml(reason)}</p>
+      <p><strong>Risco:</strong> ${escapeHtml(risk)}</p>
       <p class="highlight-copy">Executar esta acao pode gerar ate ${formatPercent(topTask.impactPercent)} de avanco no projeto.</p>
     </article>
   `;
@@ -272,6 +390,11 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
 
 function renderCompensation(project: Project, weightModel: ProjectWeightModel, generatedAt: string): string {
   const taskViews = buildOperationalTaskViews(weightModel, project, generatedAt, 5);
+  const top3 = taskViews.slice(0, 3).reduce((sum, task) => sum + task.impactPercent, 0);
+  const top5 = taskViews.slice(0, 5).reduce((sum, task) => sum + task.impactPercent, 0);
+  const interpretation = top3 > 0
+    ? "Existe capacidade de recuperacao, porem limitada e dependente de acao imediata."
+    : "A capacidade de recuperacao identificada neste recorte e baixa.";
 
   if (taskViews.length === 0) {
     return '<p class="muted">Nao ha tasks suficientes para leitura operacional de compensacao.</p>';
@@ -281,23 +404,24 @@ function renderCompensation(project: Project, weightModel: ProjectWeightModel, g
     <div class="metric-grid three">
       <article class="metric-card">
         <span>Top 3 impacto</span>
-        <strong>${formatPercent(taskViews.slice(0, 3).reduce((sum, task) => sum + task.impactPercent, 0))}</strong>
+        <strong>${formatPercent(top3)}</strong>
       </article>
       <article class="metric-card">
         <span>Top 5 impacto</span>
-        <strong>${formatPercent(taskViews.slice(0, 5).reduce((sum, task) => sum + task.impactPercent, 0))}</strong>
+        <strong>${formatPercent(top5)}</strong>
       </article>
       <article class="metric-card">
         <span>Tasks consideradas</span>
         <strong>${formatNumber(taskViews.length, 0)}</strong>
       </article>
     </div>
+    <p class="support-copy">${escapeHtml(interpretation)}</p>
     <ul class="task-list">
       ${taskViews
         .map(
           (task) => `
             <li>
-              <strong>${escapeHtml(task.name)}</strong>
+              <strong>${escapeHtml(formatTaskDisplay(task.taskIdentifier, task.taskId, task.name))}</strong>
               <span>${escapeHtml(task.disciplineName ?? "n/a")} | impacto ${formatPercent(task.impactPercent)} | status ${escapeHtml(task.statusLabel)}</span>
             </li>
           `,
@@ -316,7 +440,7 @@ function renderGapVsCompensation(gapVsCompensation?: GapVsCompensation): string 
     <section class="report-section">
       <div class="section-header">
         <p class="section-kicker">GAP VS COMPENSACAO</p>
-        <h2>Leitura de cobertura do gap</h2>
+        <h2>Capacidade de cobertura do gap</h2>
       </div>
       <div class="metric-grid four">
         <article class="metric-card">
@@ -341,8 +465,18 @@ function renderGapVsCompensation(gapVsCompensation?: GapVsCompensation): string 
   `;
 }
 
-function resolveProjectName(input: ExecutiveReportInput): string {
-  return input.projectDisplayName?.trim() || input.project.name || "Projeto sem identificacao";
+function renderConclusion(input: ExecutiveReportInput): string {
+  const status = (input.scheduleStatus?.status ?? input.score.status).toUpperCase();
+
+  if (status === "CRITICAL" || status === "ATRASADO") {
+    return "O projeto se encontra em estado de atencao critica, com risco real de agravamento do atraso. A execucao atual nao e suficiente para recuperar o ritmo planejado. A intervencao imediata e necessaria.";
+  }
+
+  if (status === "ATENCAO" || status === "ATENCAO" || status === "MODERATE") {
+    return "O projeto se encontra em estado de atencao, com risco de agravamento caso o ritmo atual seja mantido. A prioridade agora e concentrar execucao nas frentes de maior impacto.";
+  }
+
+  return "O projeto permanece controlado neste recorte, mas deve manter foco nas frentes de maior impacto para preservar o desempenho.";
 }
 
 export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
@@ -400,6 +534,11 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       h3 {
         font-size: 20px;
         margin-bottom: 12px;
+      }
+      .priority-task {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 14px;
       }
       .section-kicker {
         font-size: 11px;
@@ -516,18 +655,30 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       }
       .support-copy,
       .footnote,
-      .muted {
+      .muted,
+      .executive-copy {
         color: #52606d;
         line-height: 1.5;
+      }
+      .executive-copy {
+        font-size: 16px;
       }
       .highlight-card {
         border: 1px solid #f0d49a;
         background: linear-gradient(180deg, #fffdf7 0%, #fff9ef 100%);
       }
+      .highlight-card.subtle {
+        border-color: #d9e2ec;
+        background: #ffffff;
+      }
       .highlight-copy {
         font-size: 16px;
         font-weight: 700;
         margin-bottom: 0;
+      }
+      .highlight-copy.small {
+        font-size: 15px;
+        font-weight: 600;
       }
       @media print {
         body {
@@ -563,15 +714,31 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
 
       <section class="report-section">
         <div class="section-header">
-          <p class="section-kicker">ALERTAS EXECUTIVOS</p>
-          <h2>Sinais prioritarios para decisao</h2>
+          <p class="section-kicker">SITUACAO GERAL DO PROJETO</p>
+          <h2>Leitura executiva da situacao atual</h2>
+        </div>
+        <p class="executive-copy">${escapeHtml(buildGeneralSituation(input))}</p>
+      </section>
+
+      <section class="report-section">
+        <div class="section-header">
+          <p class="section-kicker">LEITURA EXECUTIVA</p>
+          <h2>O que a gestao precisa saber agora</h2>
+        </div>
+        <p class="executive-copy">${escapeHtml(buildExecutiveReading(input))}</p>
+      </section>
+
+      <section class="report-section">
+        <div class="section-header">
+          <p class="section-kicker">PRINCIPAIS RISCOS IDENTIFICADOS</p>
+          <h2>Riscos com potencial de impacto imediato</h2>
         </div>
         ${renderAlerts(input.executiveAlerts)}
       </section>
 
       <section class="report-section">
         <div class="section-header">
-          <p class="section-kicker">PRAZO</p>
+          <p class="section-kicker">SITUACAO DE PRAZO</p>
           <h2>Leitura objetiva do cronograma</h2>
         </div>
         ${renderScheduleSummary(input.insights, input.scheduleStatus)}
@@ -579,8 +746,8 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
 
       <section class="report-section">
         <div class="section-header">
-          <p class="section-kicker">PESO NORMALIZADO</p>
-          <h2>Base de impacto do projeto</h2>
+          <p class="section-kicker">AVANCO DO PROJETO</p>
+          <h2>Ritmo de execucao e saldo pendente</h2>
         </div>
         ${renderWeightSummary(input.weightModel)}
       </section>
@@ -588,10 +755,12 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">DISCIPLINAS</p>
-          <h2>Leitura por frente estrutural</h2>
+          <h2>Distribuicao do impacto por frente estrutural</h2>
         </div>
         ${renderDisciplines(input.disciplines, input.weightModel, input.compensationByDiscipline)}
       </section>
+
+      ${renderCriticalDiscipline(input.disciplines, input.compensationByDiscipline)}
 
       ${renderImmediateAction(input.project, input.weightModel, input.generatedAt)}
 
@@ -604,9 +773,16 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       </section>
 
       ${renderGapVsCompensation(input.gapVsCompensation)}
+
+      <section class="report-section">
+        <div class="section-header">
+          <p class="section-kicker">CONCLUSAO EXECUTIVA</p>
+          <h2>Direcao recomendada para a gestao</h2>
+        </div>
+        <p class="executive-copy">${escapeHtml(renderConclusion(input))}</p>
+      </section>
     </div>
   </body>
 </html>
   `.trim();
 }
-
