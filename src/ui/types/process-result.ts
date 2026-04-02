@@ -17,8 +17,10 @@ import type { ScheduleStatus } from "../../core/schedule/build-schedule-status";
 import type { ProjectScore } from "../../core/score/build-project-score";
 import type { ProjectWeightModel } from "../../core/weight/build-project-weight-model";
 import type { ProjectComparison } from "../../app/history/snapshot-history";
+import type { VersionComparisonSummary } from "../../app/comparison/compare-project-versions";
 
 export type ProcessResult = {
+  analysisMode?: "single" | "comparison";
   generatedAt: string;
   model: Project;
   diagnostics: Diagnostics;
@@ -41,4 +43,5 @@ export type ProcessResult = {
   executiveReportHtml: string;
   gapVsCompensation?: GapVsCompensation;
   comparison?: ProjectComparison;
+  versionComparison?: VersionComparisonSummary;
 };

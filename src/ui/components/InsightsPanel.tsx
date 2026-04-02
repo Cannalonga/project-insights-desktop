@@ -5,6 +5,7 @@
 } from "../../core/compensation/build-operational-compensation";
 import type { ExecutiveAlert } from "../../core/alerts/build-executive-alerts";
 import type { ProjectDiscipline } from "../../core/disciplines/build-project-disciplines";
+import type { LicenseContextState } from "../../core/license/license-types";
 import type { Project } from "../../core/model/project";
 import type { Task } from "../../core/model/task";
 import type { ProjectWeightModel } from "../../core/weight/build-project-weight-model";
@@ -13,6 +14,7 @@ import type {
   DecisionActionTask,
 } from "../decision/build-decision-actions";
 import type { DecisionActionWithNarrative } from "../decision/build-decision-narrative";
+import { LicenseGate } from "../license/LicenseGate";
 import type { PresentationMode } from "../types/presentation-mode";
 
 type InsightsPanelProps = {
@@ -24,6 +26,9 @@ type InsightsPanelProps = {
   weightModel?: ProjectWeightModel | null;
   executiveAlerts?: ExecutiveAlert[];
   decisionActions?: DecisionActionWithNarrative[];
+  license: LicenseContextState;
+  onRequestLicense: () => Promise<void>;
+  onOpenBuyLicense: () => Promise<void>;
 };
 
 function formatNumber(value: number, maximumFractionDigits = 2): string {
@@ -441,6 +446,9 @@ export function InsightsPanel({
   weightModel,
   executiveAlerts = [],
   decisionActions = [],
+  license,
+  onRequestLicense,
+  onOpenBuyLicense,
 }: InsightsPanelProps) {
   const isExecutiveMode = presentationMode === "executive";
   const tasksById = new Map((project?.tasks ?? []).map((task) => [task.id, task]));
@@ -465,11 +473,39 @@ export function InsightsPanel({
 
   return (
     <section className="dashboard-grid">
-      {isExecutiveMode && primaryExecutiveAction ? (
-        <section className="panel-card action-panel">
-          <div className="panel-header">
-            <div>
-              <p className="panel-kicker">Decisão imediata</p>
+        {isExecutiveMode && primaryExecutiveAction ? (
+          <LicenseGate
+            feature="executive_full_view"
+            license={license}
+            onRequestLicense={onRequestLicense}
+            onOpenBuyLicense={onOpenBuyLicense}
+            fallback={
+              <section className="panel-card action-panel">
+                <div className="panel-header">
+                  <div>
+                    <p className="panel-kicker">Visao executiva</p>
+                    <h2 className="panel-title">Leitura premium bloqueada</h2>
+                  </div>
+                </div>
+                <p className="panel-description">
+                  A demonstracao mostra o status geral do projeto, mas a leitura executiva completa e liberada apenas
+                  na versao licenciada.
+                </p>
+                <div className="priority-stats">
+                  <span className="comparison-chip">
+                    <strong>Acao lider</strong> {primaryExecutiveAction.narrative.shortLabel}
+                  </span>
+                  <span className="comparison-chip">
+                    <strong>Disciplina principal</strong> {primaryExecutiveAction.disciplineType}
+                  </span>
+                </div>
+              </section>
+            }
+          >
+            <section className="panel-card action-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Decisão imediata</p>
               <h2 className="panel-title">Top 3 ações</h2>
             </div>
           </div>
@@ -552,8 +588,8 @@ export function InsightsPanel({
           </article>
 
           <p className="action-section-title">Top 3 ações para esta leitura</p>
-          <div className="priority-list">
-            {executiveActions.map((action, index) => (
+            <div className="priority-list">
+              {executiveActions.map((action, index) => (
               <article key={action.id} className={`priority-card ${index < 3 ? "top-ranked" : ""}`}>
                 <span className="priority-rank">#{index + 1}</span>
                 <strong>{action.narrative.shortLabel}</strong>
@@ -574,10 +610,11 @@ export function InsightsPanel({
                 <p className="priority-reason">{action.narrative.headline}</p>
                 {renderDecisionTaskDetails(action)}
               </article>
-            ))}
-          </div>
-        </section>
-      ) : presentationGroups.length > 0 ? (
+              ))}
+            </div>
+            </section>
+          </LicenseGate>
+        ) : presentationGroups.length > 0 ? (
         <section className="panel-card action-panel">
           <div className="panel-header">
             <div>
@@ -841,52 +878,67 @@ export function InsightsPanel({
             </article>
           </div>
 
-          <p className="panel-description" style={{ marginTop: 16 }}>
-            {compensationAnalysis.potential.message}
-          </p>
+            <p className="panel-description" style={{ marginTop: 16 }}>
+              {compensationAnalysis.potential.message}
+            </p>
 
-          {!isExecutiveMode && impactComposition.length > 0 ? (
-            <div className="visual-support-grid" style={{ marginTop: 18 }}>
-              <article className="support-chart-card">
-                <p className="panel-kicker">Composição por impacto</p>
-                <h3 className="support-chart-title">Tasks com maior peso pendente</h3>
-                <div className="impact-bar-chart" role="img" aria-label="Composição por impacto das tasks prioritárias">
-                  {impactComposition.map((item) => (
-                    <div key={item.key} className="impact-bar-row">
-                      <div className="impact-bar-header">
-                        <span className="impact-bar-label" title={item.label}>{item.label}</span>
-                        <strong>{formatPercent(item.value)}</strong>
-                      </div>
-                      <div className="impact-bar-track">
-                        <div className="impact-bar-fill" style={{ width: `${Math.max(item.value, 2)}%` }} />
-                      </div>
-                    </div>
-                  ))}
+            <LicenseGate
+              feature="recovery_full"
+              license={license}
+              onRequestLicense={onRequestLicense}
+              onOpenBuyLicense={onOpenBuyLicense}
+              fallback={
+                <div className="license-preview-card" style={{ marginTop: 18 }}>
+                  <p className="panel-description">
+                    A demonstracao mostra o potencial agregado de compensacao, mas a leitura operacional completa fica
+                    disponivel apenas na versao licenciada.
+                  </p>
                 </div>
-              </article>
-
-              <article className="support-chart-card">
-                <p className="panel-kicker">Progresso x potencial</p>
-                <h3 className="support-chart-title">Leitura comparativa</h3>
-                <div className="comparison-bars" role="img" aria-label="Comparação entre progresso atual e potencial de compensação">
-                  {progressPotential.map((item) => (
-                    <div key={item.key} className="comparison-bar-row">
-                      <div className="comparison-bar-header">
-                        <span>{item.label}</span>
-                        <strong>{formatPercent(item.value)}</strong>
+              }
+            >
+              <>
+                {!isExecutiveMode && impactComposition.length > 0 ? (
+                  <div className="visual-support-grid" style={{ marginTop: 18 }}>
+                    <article className="support-chart-card">
+                      <p className="panel-kicker">Composição por impacto</p>
+                      <h3 className="support-chart-title">Tasks com maior peso pendente</h3>
+                      <div className="impact-bar-chart" role="img" aria-label="Composição por impacto das tasks prioritárias">
+                        {impactComposition.map((item) => (
+                          <div key={item.key} className="impact-bar-row">
+                            <div className="impact-bar-header">
+                              <span className="impact-bar-label" title={item.label}>{item.label}</span>
+                              <strong>{formatPercent(item.value)}</strong>
+                            </div>
+                            <div className="impact-bar-track">
+                              <div className="impact-bar-fill" style={{ width: `${Math.max(item.value, 2)}%` }} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="comparison-bar-track">
-                        <div className={`comparison-bar-fill ${item.tone}`} style={{ width: `${Math.max(item.value, 2)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            </div>
-          ) : null}
+                    </article>
 
-          {!isExecutiveMode ? (
-            <ul className="clean-list compact-task-list" style={{ marginTop: 16 }}>
+                    <article className="support-chart-card">
+                      <p className="panel-kicker">Progresso x potencial</p>
+                      <h3 className="support-chart-title">Leitura comparativa</h3>
+                      <div className="comparison-bars" role="img" aria-label="Comparação entre progresso atual e potencial de compensação">
+                        {progressPotential.map((item) => (
+                          <div key={item.key} className="comparison-bar-row">
+                            <div className="comparison-bar-header">
+                              <span>{item.label}</span>
+                              <strong>{formatPercent(item.value)}</strong>
+                            </div>
+                            <div className="comparison-bar-track">
+                              <div className={`comparison-bar-fill ${item.tone}`} style={{ width: `${Math.max(item.value, 2)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  </div>
+                ) : null}
+
+                {!isExecutiveMode ? (
+                  <ul className="clean-list compact-task-list" style={{ marginTop: 16 }}>
             {(isExecutiveMode ? presentationGroups.slice(0, 3) : presentationGroups).map((group) => (
               <li key={`comp-${group.key}`}>
                 <strong>
@@ -969,10 +1021,12 @@ export function InsightsPanel({
                 {isExecutiveMode ? renderGroupedTaskDetails(group, tasksById, disciplinesByName) : null}
               </li>
             ))}
-            </ul>
-          ) : null}
-        </section>
-      ) : null}
+                  </ul>
+                ) : null}
+              </>
+            </LicenseGate>
+          </section>
+        ) : null}
 
       {topAlerts.length > 0 && !isExecutiveMode ? (
         <section className="panel-card compact">

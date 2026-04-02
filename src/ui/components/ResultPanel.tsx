@@ -3,36 +3,28 @@ import { writeTextFile } from "@tauri-apps/api/fs";
 import { useState } from "react";
 
 import { buildExecutivePdfReportForScope } from "../../app/use-cases/build-executive-pdf-report-scope";
-import { buildExecutiveReportForScope } from "../../app/use-cases/build-executive-report-scope";
 import { exportExecutivePdf } from "../../app/use-cases/export-executive-pdf";
+import type { LicenseContextState } from "../../core/license/license-types";
 import { buildPowerBIPackage } from "../../core/export/export-power-bi-package";
+import { LicenseGate } from "../license/LicenseGate";
 import type { PresentationMode } from "../types/presentation-mode";
 import type { ProcessResult } from "../types/process-result";
 
 type ResultPanelProps = {
   result: ProcessResult | null;
   presentationMode: PresentationMode;
+  license: LicenseContextState;
+  onRequestLicense: () => Promise<void>;
+  onOpenBuyLicense: () => Promise<void>;
 };
 
-const POWER_BI_FILES = [
-  "project_insights_export.json",
-  "fact_tasks.csv",
-  "fact_disciplines.csv",
-  "fact_snapshots.csv",
-  "fact_compensation.csv",
-  "manifest.json",
-];
-
-const AVAILABLE_OUTPUTS = [
-  "Relatório executivo (PDF)",
-  "Relatório HTML",
-  "CSV consolidado",
-  "XML estruturado",
-  "JSON analítico",
-  "Pacote Power BI",
-];
-
-export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
+export function ResultPanel({
+  result,
+  presentationMode,
+  license,
+  onRequestLicense,
+  onOpenBuyLicense,
+}: ResultPanelProps) {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [selectedScope, setSelectedScope] = useState<string>("global");
 
@@ -57,7 +49,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       await writeTextFile(filePath, content);
       setExportMessage(`${name} salvo em ${filePath}`);
     } catch (err) {
-      setExportMessage(err instanceof Error ? err.message : `Não foi possível salvar ${name.toLowerCase()}.`);
+      setExportMessage(err instanceof Error ? err.message : `Nao foi possivel salvar ${name.toLowerCase()}.`);
     }
   }
 
@@ -67,15 +59,10 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       : ({ kind: "discipline", outlineNumber: selectedScope } as const);
   }
 
-  async function handleSaveExecutiveReportHtml(): Promise<void> {
-    const reportHtml = buildExecutiveReportForScope(currentResult, resolveReportScope());
-    await saveTextExport("relatório-executivo.html", "Relatório executivo", reportHtml, "html");
-  }
-
   async function handleSaveExecutiveReportPdf(): Promise<void> {
     try {
       const filePath = await save({
-        title: "Relatório executivo (PDF)",
+        title: "Relatorio executivo (PDF)",
         defaultPath: "relatorio-executivo.pdf",
         filters: [{ name: "PDF", extensions: ["pdf"] }],
       });
@@ -86,9 +73,9 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
 
       const reportHtml = buildExecutivePdfReportForScope(currentResult, resolveReportScope());
       await exportExecutivePdf(reportHtml, filePath);
-      setExportMessage(`Relatório executivo (PDF) salvo em ${filePath}`);
+      setExportMessage(`Relatorio executivo (PDF) salvo em ${filePath}`);
     } catch (err) {
-      setExportMessage(err instanceof Error ? err.message : "Não foi possível gerar o relatório executivo em PDF.");
+      setExportMessage(err instanceof Error ? err.message : "Nao foi possivel gerar o relatorio executivo em PDF.");
     }
   }
 
@@ -97,7 +84,7 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       const directoryPath = await open({
         directory: true,
         multiple: false,
-        title: "Selecionar pasta para exportação Power BI",
+        title: "Selecionar pasta para exportacao Power BI",
       });
 
       if (!directoryPath || Array.isArray(directoryPath)) {
@@ -120,73 +107,34 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
       });
 
       for (const file of powerBIPackage.files) {
-        await writeTextFile(`${directoryPath}\\${file.fileName}`, file.content);
+        await writeTextFile(`${directoryPath}\${file.fileName}`, file.content);
       }
 
       setExportMessage(`Pacote Power BI salvo em ${directoryPath}`);
     } catch (err) {
-      setExportMessage(err instanceof Error ? err.message : "Não foi possível salvar o pacote Power BI.");
+      setExportMessage(err instanceof Error ? err.message : "Nao foi possivel salvar o pacote Power BI.");
     }
   }
 
   return (
-    <section className="panel-card compact export-panel">
-      <div className="panel-header export-panel-header">
+    <section className="panel-card compact export-panel export-panel-clean">
+      <div className="panel-header export-panel-header compact-header">
         <div>
-          <p className="panel-kicker">Saída técnica</p>
-          <h2 className="panel-title">Exportação externa</h2>
+          <p className="panel-kicker">Exportacoes</p>
+          <h2 className="panel-title">Arquivos para uso externo</h2>
         </div>
         <span className="comparison-chip">
-          <strong>Projeto processado</strong> {currentResult.model.name}
+          <strong>Projeto</strong> {currentResult.model.name}
         </span>
       </div>
 
-      <div className="export-sections-grid">
-        <article className="export-section-card">
-          <p className="panel-kicker">Entrada aceita</p>
-          <h3 className="support-chart-title">Arquivo de origem</h3>
-          <div className="export-chip-list">
-            <span className="export-chip">
-              <strong>.mpp</strong>
-            </span>
-            <span className="export-chip">
-              <strong>.xml</strong>
-            </span>
-          </div>
-        </article>
-
-        <article className="export-section-card">
-          <p className="panel-kicker">Saídas disponíveis</p>
-          <h3 className="support-chart-title">Formatos gerados</h3>
-          <div className="export-chip-list">
-            {AVAILABLE_OUTPUTS.map((output) => (
-              <span key={output} className="export-chip">
-                {output}
-              </span>
-            ))}
-          </div>
-        </article>
-
-        <article className="export-section-card export-section-card-wide">
-          <p className="panel-kicker">Pacote Power BI</p>
-          <h3 className="support-chart-title">Arquivos analíticos</h3>
-          <ul className="clean-list export-file-list">
-            {POWER_BI_FILES.map((fileName) => (
-              <li key={fileName}>
-                <code>{fileName}</code>
-              </li>
-            ))}
-          </ul>
-        </article>
-      </div>
-
-      <div className="metrics-grid export-summary-grid">
+      <div className="metrics-grid export-summary-grid compact-summary-grid">
         <div className="metric-card">
-          <span className="metric-label">Projeto processado</span>
+          <span className="metric-label">Projeto</span>
           <strong>{currentResult.model.name}</strong>
         </div>
         <div className="metric-card">
-          <span className="metric-label">Escopo do relatório</span>
+          <span className="metric-label">Escopo</span>
           <strong>{selectedScope === "global" ? "Projeto completo" : "Disciplina selecionada"}</strong>
         </div>
         <div className="metric-card">
@@ -195,17 +143,17 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
         </div>
       </div>
 
-      <section className="export-actions-card">
-        <div className="panel-header" style={{ marginBottom: 14 }}>
+      <section className="export-actions-card compact-actions-card">
+        <div className="panel-header compact-header" style={{ marginBottom: 12 }}>
           <div>
-            <p className="panel-kicker">Relatório executivo</p>
-            <h3 className="support-chart-title">Escolha a área e gere o PDF</h3>
+            <p className="panel-kicker">Relatorio executivo</p>
+            <h3 className="support-chart-title">Gerar o PDF</h3>
           </div>
         </div>
 
         <div className="form-row export-form-row">
           <label htmlFor="executive-report-scope" className="metric-label">
-            Área do relatório
+            Area do relatorio
           </label>
           <select
             id="executive-report-scope"
@@ -220,53 +168,81 @@ export function ResultPanel({ result, presentationMode }: ResultPanelProps) {
               </option>
             ))}
           </select>
-          <button type="button" className="secondary-button" onClick={() => void handleSaveExecutiveReportPdf()}>
-            Gerar relatório executivo (PDF)
-          </button>
-          <button type="button" className="ghost-button" onClick={() => void handleSaveExecutiveReportHtml()}>
-            Salvar HTML
-          </button>
+          <LicenseGate
+            feature="export_executive_report"
+            license={license}
+            onRequestLicense={onRequestLicense}
+            onOpenBuyLicense={onOpenBuyLicense}
+          >
+            {({ run }) => (
+              <button type="button" className="secondary-button" onClick={() => void run(handleSaveExecutiveReportPdf)}>
+                Gerar relatorio executivo (PDF)
+              </button>
+            )}
+          </LicenseGate>
         </div>
       </section>
 
-      <section className="export-actions-card">
-        <div className="panel-header" style={{ marginBottom: 14 }}>
+      <section className="export-actions-card compact-actions-card">
+        <div className="panel-header compact-header" style={{ marginBottom: 12 }}>
           <div>
-            <p className="panel-kicker">Exportação técnica</p>
-            <h3 className="support-chart-title">Arquivos para uso externo</h3>
+            <p className="panel-kicker">Exportacoes uteis</p>
+            <h3 className="support-chart-title">Arquivos para analise externa</h3>
           </div>
         </div>
 
         <div className="form-row export-actions-row">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void saveTextExport("base-analitica-completa.csv", "CSV completo", currentResult.csv, "csv")}
+          <LicenseGate
+            feature="export_csv"
+            license={license}
+            onRequestLicense={onRequestLicense}
+            onOpenBuyLicense={onOpenBuyLicense}
           >
-            Exportar CSV completo
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void handleSavePowerBIPackage()}>
-            Exportar pacote Power BI
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void saveTextExport("cronograma-estruturado.xml", "XML estruturado", currentResult.structuredXml, "xml")}
+            {({ run }) => (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void run(() => saveTextExport("base-analitica-completa.csv", "CSV completo", currentResult.csv, "csv"))}
+              >
+                Exportar CSV
+              </button>
+            )}
+          </LicenseGate>
+
+          <LicenseGate
+            feature="export_machine_json"
+            license={license}
+            onRequestLicense={onRequestLicense}
+            onOpenBuyLicense={onOpenBuyLicense}
           >
-            Exportar XML estruturado
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void saveTextExport("cronograma-analítico.json", "JSON analítico", currentResult.json, "json")}
+            {({ run }) => (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void run(() => saveTextExport("cronograma-analitico.json", "JSON analitico", currentResult.json, "json"))}
+              >
+                Exportar JSON
+              </button>
+            )}
+          </LicenseGate>
+
+          <LicenseGate
+            feature="export_power_bi_package"
+            license={license}
+            onRequestLicense={onRequestLicense}
+            onOpenBuyLicense={onOpenBuyLicense}
           >
-            Exportar JSON analítico
-          </button>
+            {({ run }) => (
+              <button type="button" className="secondary-button" onClick={() => void run(handleSavePowerBIPackage)}>
+                Exportar Power BI
+              </button>
+            )}
+          </LicenseGate>
         </div>
       </section>
 
       {exportMessage ? (
-        <p className="app-message info" style={{ marginTop: 16 }}>
+        <p className="app-message info" style={{ marginTop: 8 }}>
           {exportMessage}
         </p>
       ) : null}

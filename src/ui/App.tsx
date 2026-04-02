@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { ComparisonPanel } from "./components/ComparisonPanel";
 import { FilePicker } from "./components/FilePicker";
 import { InsightsPanel } from "./components/InsightsPanel";
 import { OperationalPanel } from "./components/OperationalPanel";
@@ -10,6 +11,9 @@ import {
   type DecisionActionWithNarrative,
 } from "./decision/build-decision-narrative";
 import { useProcessMPP } from "./hooks/use-process-mpp";
+import { LicenseBanner } from "./license/LicenseBanner";
+import { LicensePanel } from "./license/LicensePanel";
+import { useLicense } from "./license/use-license";
 import type { PresentationMode } from "./types/presentation-mode";
 
 function getExecutiveHeadline(status: string | undefined): string {
@@ -27,7 +31,28 @@ function getExecutiveHeadline(status: string | undefined): string {
 }
 
 export function App() {
-  const { result, loading, error, processingMessage, slowProcessingMessage, processFile, reportError } = useProcessMPP();
+  const {
+    result,
+    loading,
+    error,
+    processingMessage,
+    slowProcessingMessage,
+    analysisMode,
+    setAnalysisMode,
+    processFile,
+    processComparisonFiles,
+    reportError,
+  } = useProcessMPP();
+  const {
+    license,
+    loading: licenseLoading,
+    importing: licenseImporting,
+    exportingLogs: licenseExportingLogs,
+    notice,
+    applyLicenseText,
+    exportLogs,
+    openBuyLicense,
+  } = useLicense();
   const [presentationMode, setPresentationMode] = useState<PresentationMode>("complete");
   const isExecutiveMode = presentationMode === "executive";
 
@@ -50,6 +75,7 @@ export function App() {
     [result],
   );
 
+  const effectiveAnalysisMode = result?.analysisMode ?? analysisMode;
   const executiveHeadline = getExecutiveHeadline(result?.scheduleStatus?.status ?? result?.score?.status);
   const executiveProblem =
     decisionActions[0]?.narrative.headline ??
@@ -60,6 +86,8 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <LicenseBanner license={license} loading={licenseLoading} />
+
       <section className="app-hero">
         <div>
           <p className="eyebrow">Controle operacional de cronograma</p>
@@ -71,11 +99,33 @@ export function App() {
         </div>
 
         <div className="hero-actions">
-          <FilePicker loading={loading} processFile={processFile} reportError={reportError} />
+          <FilePicker
+            loading={loading}
+            mode={analysisMode}
+            onModeChange={setAnalysisMode}
+            processFile={processFile}
+            processComparisonFiles={processComparisonFiles}
+            reportError={reportError}
+          />
           <span className="hero-status">
-            {result ? `Leitura pronta para ${result.model.name || "projeto carregado"}` : "Selecione um arquivo MPP ou XML"}
+            {result
+              ? effectiveAnalysisMode === "comparison"
+                ? `Comparação pronta para ${(result.versionComparison?.currentFileName ?? result.model.name) || "projeto carregado"}`
+                : `Leitura pronta para ${result.model.name || "projeto carregado"}`
+              : analysisMode === "comparison"
+                ? "Selecione a versão base e a versão atual do mesmo projeto"
+                : "Selecione um arquivo MPP ou XML"}
           </span>
         </div>
+
+        <LicensePanel
+          license={license}
+          loading={licenseLoading}
+          importing={licenseImporting}
+          exportingLogs={licenseExportingLogs}
+          onApplyLicenseText={applyLicenseText}
+          onExportLogs={exportLogs}
+        />
 
         <div className="presentation-mode-switch">
           <span className="metric-label">Visão do Projeto</span>
@@ -132,10 +182,11 @@ export function App() {
             <strong>{processingMessage ?? "Processando arquivo..."}</strong>
           </div>
           <p className="app-message-detail">
-            {slowProcessingMessage ?? "Projetos maiores podem levar mais tempo para analise. Aguarde a conclusao do processamento."}
+            {slowProcessingMessage ?? "Projetos maiores podem levar mais tempo para análise. Aguarde a conclusão do processamento."}
           </p>
         </div>
       ) : null}
+      {notice ? <p className="app-message info">{notice}</p> : null}
       {error ? <p className="app-message error">{error}</p> : null}
 
       <div className="dashboard-grid">
@@ -144,10 +195,12 @@ export function App() {
           score={result?.score ?? null}
           analysisReliability={result?.analysisReliability ?? null}
           scheduleStatus={result?.scheduleStatus ?? null}
-          gapVsCompensation={result?.gapVsCompensation ?? null}
+          gapVsCompensation={effectiveAnalysisMode === "comparison" ? result?.gapVsCompensation ?? null : null}
+          versionComparison={effectiveAnalysisMode === "comparison" ? result?.versionComparison ?? null : null}
           sCurve={result?.sCurve ?? null}
           decisionActions={decisionActions}
         />
+        <ComparisonPanel comparison={effectiveAnalysisMode === "comparison" ? result?.versionComparison ?? null : null} />
         <InsightsPanel
           presentationMode={presentationMode}
           project={result?.model ?? null}
@@ -157,8 +210,21 @@ export function App() {
           weightModel={result?.weightModel ?? null}
           executiveAlerts={result?.executiveAlerts ?? []}
           decisionActions={decisionActions}
+          license={license}
+          onRequestLicense={async () => {
+            window.dispatchEvent(new CustomEvent("project-insights:open-license-panel"));
+          }}
+          onOpenBuyLicense={openBuyLicense}
         />
-        <ResultPanel result={result} presentationMode={presentationMode} />
+        <ResultPanel
+          result={result}
+          presentationMode={presentationMode}
+          license={license}
+          onRequestLicense={async () => {
+            window.dispatchEvent(new CustomEvent("project-insights:open-license-panel"));
+          }}
+          onOpenBuyLicense={openBuyLicense}
+        />
       </div>
     </main>
   );

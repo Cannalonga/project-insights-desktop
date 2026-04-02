@@ -8,6 +8,7 @@ import { buildOperationalTaskViews } from "../operations/build-operational-task-
 import type { ScheduleStatus } from "../schedule/build-schedule-status";
 import type { ProjectWeightModel } from "../weight/build-project-weight-model";
 import type { ExecutiveReportInput } from "./build-executive-report";
+import type { ComparedTaskDelta, VersionComparisonSummary } from "../../app/comparison/compare-project-versions";
 
 function escapeHtml(value: string): string {
   return value
@@ -353,7 +354,7 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
     actualStart ? `Inicio real ${actualStart}` : null,
     actualFinish ? `Fim real ${actualFinish}` : null,
   ].filter(Boolean);
-  const reason = `${topTask.disciplineName ?? "A task"} concentra uma das maiores alavancas de avanco imediato no projeto.`;
+  const reason = `${topTask.disciplineName ?? "A task"} concentra uma das maiores alavancas de avanÃ§o imediato no projeto.`;
   const risk = `Se essa frente nao avancar, o projeto tende a manter pressao sobre prazo e a reduzir sua capacidade de recuperacao.`;
   const taskDisplay = formatTaskDisplay(topTask.taskIdentifier, topTask.taskId, topTask.name);
 
@@ -383,7 +384,7 @@ function renderImmediateAction(project: Project, weightModel: ProjectWeightModel
       ${scheduleItems.length > 0 ? `<p class="support-copy">${escapeHtml(scheduleItems.join(" | "))}</p>` : ""}
       <p><strong>Motivo:</strong> ${escapeHtml(reason)}</p>
       <p><strong>Risco:</strong> ${escapeHtml(risk)}</p>
-      <p class="highlight-copy">Executar esta acao pode gerar ate ${formatPercent(topTask.impactPercent)} de avanco no projeto.</p>
+      <p class="highlight-copy">Executar esta aÃ§Ã£o pode gerar atÃ© ${formatPercent(topTask.impactPercent)} de avanÃ§o no projeto.</p>
     </article>
   `;
 }
@@ -428,6 +429,100 @@ function renderCompensation(project: Project, weightModel: ProjectWeightModel, g
         )
         .join("")}
     </ul>
+  `;
+}
+
+function renderComparedTaskLine(task: ComparedTaskDelta): string {
+  return `
+    <li>
+      <strong>${escapeHtml(task.taskIdentifier)}</strong>
+      <span>Base ${formatPercent(task.baseProgressPercent)} | Atual ${formatPercent(task.currentProgressPercent)} | Delta ${formatPercent(task.deltaProgressPercent)}</span>
+    </li>
+  `;
+}
+
+function renderComparisonSection(versionComparison?: VersionComparisonSummary): string {
+  if (!versionComparison) {
+    return "";
+  }
+
+  return `
+    <section class="report-section">
+      <div class="section-header">
+        <p class="section-kicker">EVOLUCAO ENTRE VERSOES</p>
+        <h2>Comparação entre base e atual</h2>
+      </div>
+      <div class="metric-grid four">
+        <article class="metric-card">
+          <span>Avanco base</span>
+          <strong>${formatPercent(versionComparison.projectProgress.basePercent)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>Avanco atual</span>
+          <strong>${formatPercent(versionComparison.projectProgress.currentPercent)}</strong>
+        </article>
+        <article class="metric-card ${statusTone(versionComparison.projectProgress.deltaPercent >= 0 ? "OK" : "CRITICAL")}">
+          <span>Evolução do projeto</span>
+          <strong>${formatPercent(versionComparison.projectProgress.deltaPercent)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>Tasks correlacionadas</span>
+          <strong>${formatNumber(versionComparison.matching.matchedCount, 0)}</strong>
+        </article>
+      </div>
+      <p class="executive-copy">${escapeHtml(versionComparison.executiveSummary)}</p>
+      <p class="support-copy">${escapeHtml(versionComparison.recoveryReading)}</p>
+      <div class="metric-grid three">
+        <article class="metric-card">
+          <span>Por ID</span>
+          <strong>${formatNumber(versionComparison.matching.byTaskId, 0)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>Por WBS</span>
+          <strong>${formatNumber(versionComparison.matching.byOutlineNumber, 0)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>Nome + estrutura</span>
+          <strong>${formatNumber(versionComparison.matching.byNameStructure, 0)}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="report-section">
+      <div class="section-header">
+        <p class="section-kicker">MOVIMENTO DO CRONOGRAMA</p>
+        <h2>Tasks com maior efeito entre as versões</h2>
+      </div>
+      ${versionComparison.mostAdvancedTasks.length > 0 ? `
+        <ul class="task-list">
+          ${versionComparison.mostAdvancedTasks.slice(0, 5).map(renderComparedTaskLine).join("")}
+        </ul>
+      ` : '<p class="muted">Não houve tasks com avanço relevante entre as versões.</p>'}
+      ${versionComparison.regressionTasks.length > 0 ? `
+        <div style="margin-top:16px">
+          <p class="section-kicker">REGRESSOES IDENTIFICADAS</p>
+          <ul class="task-list">
+            ${versionComparison.regressionTasks.slice(0, 5).map(renderComparedTaskLine).join("")}
+          </ul>
+        </div>
+      ` : ""}
+      ${versionComparison.newTasks.length > 0 ? `
+        <div style="margin-top:16px">
+          <p class="section-kicker">TASKS NOVAS</p>
+          <ul class="task-list">
+            ${versionComparison.newTasks.slice(0, 5).map(renderComparedTaskLine).join("")}
+          </ul>
+        </div>
+      ` : ""}
+      ${versionComparison.removedTasks.length > 0 ? `
+        <div style="margin-top:16px">
+          <p class="section-kicker">TASKS REMOVIDAS</p>
+          <ul class="task-list">
+            ${versionComparison.removedTasks.slice(0, 5).map(renderComparedTaskLine).join("")}
+          </ul>
+        </div>
+      ` : ""}
+    </section>
   `;
 }
 
@@ -715,7 +810,7 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">SITUACAO GERAL DO PROJETO</p>
-          <h2>Leitura executiva da situacao atual</h2>
+          <h2>Leitura executiva da situação atual</h2>
         </div>
         <p class="executive-copy">${escapeHtml(buildGeneralSituation(input))}</p>
       </section>
@@ -723,7 +818,7 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">LEITURA EXECUTIVA</p>
-          <h2>O que a gestao precisa saber agora</h2>
+          <h2>O que a gestão precisa saber agora</h2>
         </div>
         <p class="executive-copy">${escapeHtml(buildExecutiveReading(input))}</p>
       </section>
@@ -747,10 +842,12 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">AVANCO DO PROJETO</p>
-          <h2>Ritmo de execucao e saldo pendente</h2>
+          <h2>Ritmo de execução e saldo pendente</h2>
         </div>
         ${renderWeightSummary(input.weightModel)}
       </section>
+
+      ${renderComparisonSection(input.versionComparison)}
 
       <section class="report-section">
         <div class="section-header">
@@ -767,7 +864,7 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">COMPENSACAO OPERACIONAL</p>
-          <h2>Capacidade de recuperacao</h2>
+          <h2>Capacidade de recuperação</h2>
         </div>
         ${renderCompensation(input.project, input.weightModel, input.generatedAt)}
       </section>
@@ -777,7 +874,7 @@ export function buildExecutivePdfReport(input: ExecutiveReportInput): string {
       <section class="report-section">
         <div class="section-header">
           <p class="section-kicker">CONCLUSAO EXECUTIVA</p>
-          <h2>Direcao recomendada para a gestao</h2>
+          <h2>Direção recomendada para a gestão</h2>
         </div>
         <p class="executive-copy">${escapeHtml(renderConclusion(input))}</p>
       </section>

@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 
-import { type ProcessInput } from "../../app/use-cases/process-mpp";
+import { processProjectComparison } from "../../app/use-cases/process-project-comparison";
 import { processProjectFile, type ProcessingStage } from "../../app/use-cases/process-project-file";
+import { type ProcessInput } from "../../app/use-cases/process-mpp";
 import type { ProcessResult } from "../types/process-result";
 
 const SLOW_PROCESSING_THRESHOLD_MS = 12000;
@@ -39,12 +40,15 @@ function getStageMessage(stage: ProcessingStage): string {
   }
 }
 
+export type FileAnalysisMode = "single" | "comparison";
+
 export function useProcessMPP() {
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingMessage, setProcessingMessage] = useState<string | null>(null);
   const [slowProcessingMessage, setSlowProcessingMessage] = useState<string | null>(null);
+  const [analysisMode, setAnalysisMode] = useState<FileAnalysisMode>("single");
   const slowTimerRef = useRef<number | null>(null);
 
   function clearSlowTimer(): void {
@@ -61,7 +65,7 @@ export function useProcessMPP() {
     }, SLOW_PROCESSING_THRESHOLD_MS);
   }
 
-  async function processFile(input: ProcessInput): Promise<void> {
+  async function runProcessing(run: () => Promise<ProcessResult>): Promise<void> {
     if (loading) {
       return;
     }
@@ -74,11 +78,7 @@ export function useProcessMPP() {
     startSlowTimer();
 
     try {
-      const nextResult = await processProjectFile(input, undefined, undefined, undefined, {
-        onStage: (stage) => {
-          setProcessingMessage(getStageMessage(stage));
-        },
-      });
+      const nextResult = await run();
       setResult(nextResult);
     } catch (err) {
       setError(getUserErrorMessage(err));
@@ -89,6 +89,30 @@ export function useProcessMPP() {
       setProcessingMessage(null);
       setSlowProcessingMessage(null);
     }
+  }
+
+  async function processFile(input: ProcessInput): Promise<void> {
+    setAnalysisMode("single");
+    console.log("PROCESS SINGLE:", input.filePath ?? "sem-caminho");
+    await runProcessing(() =>
+      processProjectFile(input, undefined, undefined, undefined, {
+        onStage: (stage) => {
+          setProcessingMessage(getStageMessage(stage));
+        },
+      }),
+    );
+  }
+
+  async function processComparisonFiles(baseFilePath: string, currentFilePath: string): Promise<void> {
+    setAnalysisMode("comparison");
+    console.log("PROCESS BASE:", baseFilePath);
+    console.log("PROCESS CURRENT:", currentFilePath);
+    await runProcessing(async () => {
+      setProcessingMessage("Processando versao base...");
+      const nextResult = await processProjectComparison({ baseFilePath, currentFilePath });
+      setProcessingMessage("Comparacao concluida.");
+      return nextResult;
+    });
   }
 
   function clear(): void {
@@ -115,7 +139,10 @@ export function useProcessMPP() {
     error,
     processingMessage,
     slowProcessingMessage,
+    analysisMode,
+    setAnalysisMode,
     processFile,
+    processComparisonFiles,
     reportError,
     clear,
   };

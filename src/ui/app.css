@@ -232,6 +232,64 @@ select {
   flex-shrink: 0;
 }
 
+.license-banner {
+  margin-bottom: 16px;
+}
+
+.license-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(215, 223, 209, 0.95);
+}
+
+.license-panel-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.license-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.license-gate-action,
+.license-gate-block {
+  display: grid;
+  gap: 12px;
+}
+
+.license-inline-blocker,
+.license-preview-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 244, 219, 0.9);
+  border: 1px solid rgba(183, 121, 31, 0.2);
+}
+
+.license-inline-blocker strong {
+  color: #764b0f;
+}
+
+.license-inline-blocker p,
+.license-preview-card p {
+  margin: 0;
+  color: #6f541e;
+  line-height: 1.5;
+}
+
+.license-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .primary-button,
 .secondary-button {
   border: none;
@@ -654,7 +712,16 @@ select {
 
 .chart-scroll {
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 8px;
+}
+
+.chart-scroll-inner {
+  width: max-content;
+}
+
+.chart-scroll svg {
+  display: block;
 }
 
 .chart-legend {
@@ -1294,4 +1361,79 @@ select {
 .ghost-button:hover {
   transform: translateY(-1px);
   background: rgba(48, 79, 63, 0.04);
+}
+
+.license-apply-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(215, 223, 209, 0.95);
+}
+
+.license-apply-hint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.license-apply-textarea {
+  width: 100%;
+  min-height: 220px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  resize: vertical;
+}
+
+
+.export-panel-clean {
+  gap: 14px;
+}
+
+.compact-header {
+  margin-bottom: 12px;
+}
+
+.compact-summary-grid {
+  gap: 12px;
+}
+
+.compact-actions-card {
+  padding: 16px;
+}
+
+.compact-license-panel {
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.compact-license-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.compact-license-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.compact-metric-card {
+  padding: 14px;
+}
+
+.compact-license-apply-panel {
+  padding: 14px;
+}
+
+.export-actions-row {
+  gap: 10px;
 }

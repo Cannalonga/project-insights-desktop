@@ -22,6 +22,7 @@ import type { SCurveResult } from "../s-curve/build-s-curve";
 import type { ScheduleStatus } from "../schedule/build-schedule-status";
 import type { ProjectScore } from "../score/build-project-score";
 import type { ProjectWeightModel } from "../weight/build-project-weight-model";
+import type { VersionComparisonSummary } from "../../app/comparison/compare-project-versions";
 
 export type ExecutiveReportInput = {
   project: Project;
@@ -41,6 +42,7 @@ export type ExecutiveReportInput = {
   compensationAnalysis: OperationalCompensationAnalysis;
   compensationByDiscipline: OperationalCompensationDiscipline[];
   gapVsCompensation?: GapVsCompensation;
+  versionComparison?: VersionComparisonSummary;
 };
 
 function hasUsableName(name: string | undefined): boolean {
