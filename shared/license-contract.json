@@ -1,0 +1,22 @@
+{
+  "algorithm": "Ed25519",
+  "canonicalizationVersion": 1,
+  "canonicalizationFields": [
+    "customerName",
+    "licenseId",
+    "plan",
+    "issuedAt",
+    "expiresAt"
+  ],
+  "publicKeys": [
+    {
+      "id": "v1",
+      "key": "MvGm3Mj4xOPskOOahQoGzdwTR1zNHtCyWcDeSpfVyNA"
+    },
+    {
+      "id": "v2",
+      "key": "R0jys2b8W6lTJiKIrK_AqMQptkJp-b3KFK7QV9AtlLY"
+    }
+  ],
+  "publicKeyBase64Url": "MvGm3Mj4xOPskOOahQoGzdwTR1zNHtCyWcDeSpfVyNA"
+}

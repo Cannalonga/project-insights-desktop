@@ -11,7 +11,7 @@ import type { ProcessInput, ProcessResult } from "./process-mpp";
 import { type InputFileValidationResult, validateInputFile } from "./validate-input-file";
 
 const MPP_FALLBACK_MESSAGE =
-  "Nao foi possivel processar este arquivo diretamente. Algumas versoes do MS Project podem gerar variacoes no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.";
+  "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.";
 
 export type ProcessingStage =
   | "validating_input"
@@ -73,7 +73,7 @@ function buildMppFallbackMessage(userLogPath?: string | null): string {
     return MPP_FALLBACK_MESSAGE;
   }
 
-  return `${MPP_FALLBACK_MESSAGE} Um log tecnico foi salvo em ${userLogPath}.`;
+  return `${MPP_FALLBACK_MESSAGE} Um log técnico foi salvo em ${userLogPath}.`;
 }
 
 export class ProjectFileGuidanceError extends Error {
@@ -91,6 +91,7 @@ export async function processProjectFile(
   validateFile: (filePath: string) => Promise<InputFileValidationResult> = validateInputFile,
   readXmlFile: (filePath: string) => Promise<string> = readTextFile,
   options?: ProcessProjectFileOptions,
+  processor: (input: ProcessInput) => Promise<ProcessResult> = processMPPWithHistory,
 ): Promise<ProcessResult> {
   if (!input.filePath || !isSupportedFile(input.filePath)) {
     throw buildUnsupportedInputError();
@@ -135,7 +136,7 @@ export async function processProjectFile(
       currentStage = "generating_analysis";
       emitStage(options, currentStage);
       const analysisStartedAt = now();
-      const result = await processMPPWithHistory({
+      const result = await processor({
         filePath,
         xmlContent,
       });
@@ -196,7 +197,7 @@ export async function processProjectFile(
     emitStage(options, currentStage);
     const analysisStartedAt = now();
 
-    const result = await processMPPWithHistory({
+    const result = await processor({
       filePath,
       xmlContent,
     });

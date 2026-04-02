@@ -16,6 +16,7 @@ import { buildExecutiveReport } from "../../core/report/build-executive-report";
 import type { SCurveResult } from "../../core/s-curve/build-s-curve";
 import type { ScheduleStatus } from "../../core/schedule/build-schedule-status";
 import type { ProjectComparison } from "../history/snapshot-history";
+import type { VersionComparisonSummary } from "../comparison/compare-project-versions";
 import type { ProjectWeightModel } from "../../core/weight/build-project-weight-model";
 import {
   buildCompensationByDiscipline,
@@ -41,6 +42,7 @@ import { validateProject } from "../../core/validation/validate-project";
 import { buildProjectWeightModel } from "../../core/weight/build-project-weight-model";
 
 export type ProcessResult = {
+  analysisMode?: "single" | "comparison";
   generatedAt: string;
   model: Project;
   diagnostics: Diagnostics;
@@ -63,6 +65,7 @@ export type ProcessResult = {
   executiveReportHtml: string;
   gapVsCompensation?: GapVsCompensation;
   comparison?: ProjectComparison;
+  versionComparison?: VersionComparisonSummary;
 };
 
 export class MPPInputFatalError extends Error {
@@ -179,6 +182,7 @@ export function processMPP(input: ProcessInput): ProcessResult {
   });
 
   return {
+    analysisMode: "single",
     generatedAt,
     model,
     diagnostics,

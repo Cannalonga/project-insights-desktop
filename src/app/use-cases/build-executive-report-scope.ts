@@ -146,7 +146,8 @@ export function resolveExecutiveReportInputForScope(
       analysisReliability: result.analysisReliability,
       compensationAnalysis: result.compensationAnalysis,
       compensationByDiscipline: result.compensationByDiscipline,
-      gapVsCompensation: result.gapVsCompensation,
+      gapVsCompensation: result.analysisMode === "comparison" ? result.gapVsCompensation : undefined,
+      versionComparison: result.analysisMode === "comparison" ? result.versionComparison : undefined,
     };
   }
 

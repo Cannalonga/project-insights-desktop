@@ -1,0 +1,12 @@
+{
+  "name": "license-admin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "emitir": "node src/cli.mjs emitir",
+    "validar": "node src/cli.mjs validar",
+    "test": "node --test test/*.nodecheck.mjs"
+  }
+}
+

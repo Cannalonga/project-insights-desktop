@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 
 const LOG_FILE_NAME: &str = "processing.log";
+const APP_LOG_FILE_NAME: &str = "app.log";
 const PREVIOUS_LOG_FILE_NAME: &str = "processing.previous.log";
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 const USER_LOGS_DIR_NAME: &str = "CannaConverter_Logs";
@@ -18,6 +19,18 @@ fn resolve_log_dir(app: &AppHandle) -> PathBuf {
     }
 
     std::env::temp_dir().join("project-insights-logs")
+}
+
+fn resolve_operational_log_dir(app: &AppHandle) -> PathBuf {
+    if let Some(path) = app.path_resolver().app_data_dir() {
+        return path.join("logs");
+    }
+
+    if let Some(path) = app.path_resolver().app_local_data_dir() {
+        return path.join("logs");
+    }
+
+    std::env::temp_dir().join("project-insights-app-data").join("logs")
 }
 
 fn rotate_if_needed(log_file_path: &PathBuf) -> Result<(), String> {
@@ -46,6 +59,10 @@ fn rotate_if_needed(log_file_path: &PathBuf) -> Result<(), String> {
 
 fn resolve_processing_log_path(app: &AppHandle) -> PathBuf {
     resolve_log_dir(app).join(LOG_FILE_NAME)
+}
+
+fn resolve_operational_log_path(app: &AppHandle) -> PathBuf {
+    resolve_operational_log_dir(app).join(APP_LOG_FILE_NAME)
 }
 
 fn resolve_user_log_export_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -93,9 +110,33 @@ pub fn append_processing_log_line(app: &AppHandle, entry: &str) -> Result<PathBu
     Ok(log_file_path)
 }
 
+pub fn append_operational_log_line(app: &AppHandle, entry: &str) -> Result<PathBuf, String> {
+    let log_dir = resolve_operational_log_dir(app);
+    fs::create_dir_all(&log_dir)
+        .map_err(|error| format!("failed to create app log directory: {error}"))?;
+
+    let log_file_path = resolve_operational_log_path(app);
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file_path)
+        .map_err(|error| format!("failed to open app log file: {error}"))?;
+
+    writeln!(file, "{entry}")
+        .map_err(|error| format!("failed to append app log entry: {error}"))?;
+
+    Ok(log_file_path)
+}
+
 #[tauri::command]
 pub fn append_processing_log(app: AppHandle, entry: String) -> Result<String, String> {
     append_processing_log_line(&app, &entry).map(|path| path.display().to_string())
+}
+
+#[tauri::command]
+pub fn append_operational_log(app: AppHandle, entry: String) -> Result<String, String> {
+    append_operational_log_line(&app, &entry).map(|path| path.display().to_string())
 }
 
 #[tauri::command]
@@ -119,6 +160,31 @@ pub fn export_processing_log_for_user(app: AppHandle) -> Result<String, String> 
 
     fs::write(&export_path, contents)
         .map_err(|error| format!("failed to write user-accessible processing log: {error}"))?;
+
+    Ok(export_path.display().to_string())
+}
+
+#[tauri::command]
+pub fn export_operational_log_for_user(app: AppHandle) -> Result<String, String> {
+    let source_log_path = resolve_operational_log_path(&app);
+    if !source_log_path.exists() || !source_log_path.is_file() {
+        return Err(format!(
+            "app log file not found at {}",
+            source_log_path.display()
+        ));
+    }
+
+    let export_dir = resolve_user_log_export_dir(&app)?;
+    fs::create_dir_all(&export_dir)
+        .map_err(|error| format!("failed to create desktop log export directory: {error}"))?;
+
+    let timestamp = current_timestamp_for_filename();
+    let export_path = export_dir.join(format!("project-insights-app-log-{timestamp}.log"));
+    let contents = fs::read_to_string(&source_log_path)
+        .map_err(|error| format!("failed to read app log for export: {error}"))?;
+
+    fs::write(&export_path, contents)
+        .map_err(|error| format!("failed to write user-accessible app log: {error}"))?;
 
     Ok(export_path.display().to_string())
 }

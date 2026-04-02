@@ -16,6 +16,9 @@
         "open": true,
         "save": true
       },
+      "shell": {
+        "open": true
+      },
       "fs": {
         "readFile": true,
         "readDir": true,

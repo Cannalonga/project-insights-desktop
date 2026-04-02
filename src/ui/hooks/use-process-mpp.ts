@@ -17,10 +17,10 @@ function getUserErrorMessage(err: unknown): string {
   }
 
   if (err instanceof Error && "code" in err && err.code === "MPP_INPUT_FATAL") {
-    return "Nao foi possivel concluir a analise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas especificas. Se possivel, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
+    return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
   }
 
-  return "Nao foi possivel concluir a analise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas especificas. Se possivel, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
+  return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
 }
 
 function getStageMessage(stage: ProcessingStage): string {
@@ -32,7 +32,7 @@ function getStageMessage(stage: ProcessingStage): string {
     case "converting_mpp":
       return "Convertendo cronograma...";
     case "generating_analysis":
-      return "Gerando analise...";
+      return "Gerando análise...";
     case "completed":
       return "Analise concluida.";
     default:
@@ -61,7 +61,7 @@ export function useProcessMPP() {
   function startSlowTimer(): void {
     clearSlowTimer();
     slowTimerRef.current = window.setTimeout(() => {
-      setSlowProcessingMessage("O arquivo e grande e o processamento esta levando mais tempo que o normal. Projetos maiores podem levar mais tempo para analise.");
+      setSlowProcessingMessage("O arquivo é grande e o processamento está levando mais tempo que o normal. Projetos maiores podem levar mais tempo para análise.");
     }, SLOW_PROCESSING_THRESHOLD_MS);
   }
 
@@ -74,7 +74,7 @@ export function useProcessMPP() {
     setError(null);
     setResult(null);
     setProcessingMessage(getStageMessage("validating_input"));
-    setSlowProcessingMessage("Projetos maiores podem levar mais tempo para analise.");
+    setSlowProcessingMessage("Projetos maiores podem levar mais tempo para análise.");
     startSlowTimer();
 
     try {
@@ -108,9 +108,9 @@ export function useProcessMPP() {
     console.log("PROCESS BASE:", baseFilePath);
     console.log("PROCESS CURRENT:", currentFilePath);
     await runProcessing(async () => {
-      setProcessingMessage("Processando versao base...");
+      setProcessingMessage("Processando versão base...");
       const nextResult = await processProjectComparison({ baseFilePath, currentFilePath });
-      setProcessingMessage("Comparacao concluida.");
+      setProcessingMessage("Comparação concluída.");
       return nextResult;
     });
   }
