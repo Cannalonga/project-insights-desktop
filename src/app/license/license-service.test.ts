@@ -2,33 +2,43 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLicenseService } from "./license-service";
 
-const { loadLicenseMock, saveLicenseMock, verifyLicenseMock } = vi.hoisted(() => ({
-  loadLicenseMock: vi.fn(),
-  saveLicenseMock: vi.fn(),
-  verifyLicenseMock: vi.fn(),
+const { loadStoredLicenseStateMock, activateLicenseMock, validateLicenseMock, clearInvalidStateMock } = vi.hoisted(() => ({
+  loadStoredLicenseStateMock: vi.fn(),
+  activateLicenseMock: vi.fn(),
+  validateLicenseMock: vi.fn(),
+  clearInvalidStateMock: vi.fn(),
 }));
 
-vi.mock("./load-license", () => ({
-  loadLicense: () => loadLicenseMock(),
+vi.mock("./load-stored-license-state", () => ({
+  loadStoredLicenseState: () => loadStoredLicenseStateMock(),
 }));
 
-vi.mock("./save-license", () => ({
-  saveLicense: (...args: unknown[]) => saveLicenseMock(...args),
+vi.mock("./activate-license", () => ({
+  activateLicense: (...args: unknown[]) => activateLicenseMock(...args),
+  LicenseActivationError: class LicenseActivationError extends Error {},
 }));
 
-vi.mock("./verify-license", () => ({
-  verifyLicense: (...args: unknown[]) => verifyLicenseMock(...args),
+vi.mock("./validate-license", () => ({
+  validateLicense: (...args: unknown[]) => validateLicenseMock(...args),
+}));
+
+vi.mock("./clear-invalid-license-state", () => ({
+  clearInvalidLicenseState: (...args: unknown[]) => clearInvalidStateMock(...args),
 }));
 
 describe("license service", () => {
   beforeEach(() => {
-    loadLicenseMock.mockReset();
-    saveLicenseMock.mockReset();
-    verifyLicenseMock.mockReset();
+    loadStoredLicenseStateMock.mockReset();
+    activateLicenseMock.mockReset();
+    validateLicenseMock.mockReset();
+    clearInvalidStateMock.mockReset();
   });
 
-  it("returns missing when no persisted license exists", async () => {
-    loadLicenseMock.mockResolvedValue({ status: "missing" });
+  it("returns the locally loaded state", async () => {
+    loadStoredLicenseStateMock.mockResolvedValue({
+      context: { status: "missing", isLicensed: false, source: "local", message: "missing" },
+      storedState: null,
+    });
 
     await expect(createLicenseService().loadCurrentState()).resolves.toMatchObject({
       status: "missing",
@@ -36,92 +46,55 @@ describe("license service", () => {
     });
   });
 
-  it("returns invalid when persisted license cannot be read safely", async () => {
-    loadLicenseMock.mockResolvedValue({ status: "invalid" });
-
-    await expect(createLicenseService().loadCurrentState()).resolves.toMatchObject({
-      status: "invalid",
-      isLicensed: false,
-    });
-  });
-
-  it("returns a valid state when a stored annual license verifies correctly", async () => {
-    loadLicenseMock.mockResolvedValue({ status: "loaded", contents: "license-file" });
-    verifyLicenseMock.mockResolvedValue({
-      customerName: "Cliente Teste",
-      licenseId: "LIC-123",
-      plan: "annual",
-      issuedAt: "2026-01-01T00:00:00.000Z",
-      expiresAt: "2026-12-31T00:00:00.000Z",
-    });
-
-    await expect(createLicenseService().loadCurrentState()).resolves.toMatchObject({
+  it("delegates activation to the activation use case", async () => {
+    activateLicenseMock.mockResolvedValue({
       status: "valid",
       isLicensed: true,
-      plan: "annual",
-    });
-  });
-
-  it("falls back to invalid state when stored content is corrupted", async () => {
-    loadLicenseMock.mockResolvedValue({ status: "loaded", contents: "broken-file" });
-    verifyLicenseMock.mockRejectedValue(new Error("Licenca invalida ou corrompida."));
-
-    await expect(createLicenseService().loadCurrentState()).resolves.toMatchObject({
-      status: "invalid",
-      isLicensed: false,
-    });
-  });
-
-  it("persists the imported license only after successful verification", async () => {
-    verifyLicenseMock.mockResolvedValue({
-      customerName: "Cliente Teste",
-      licenseId: "LIC-456",
-      plan: "semiannual",
-      issuedAt: "2026-01-01T00:00:00.000Z",
-      expiresAt: "2026-06-30T00:00:00.000Z",
+      source: "remote",
+      message: "ok",
     });
 
-    const state = await createLicenseService().importLicense("new-license-file");
-
-    expect(saveLicenseMock).toHaveBeenCalledWith("new-license-file");
-    expect(state).toMatchObject({
+    await expect(createLicenseService().activateLicense("PI-ABCDE-12345-FGHIJ-67890")).resolves.toMatchObject({
       status: "valid",
-      plan: "semiannual",
       isLicensed: true,
     });
   });
 
-  it("does not persist tampered content when signature verification fails", async () => {
-    verifyLicenseMock.mockRejectedValue(new Error("signature mismatch"));
+  it("validates the stored state when one exists", async () => {
+    loadStoredLicenseStateMock.mockResolvedValue({
+      context: { status: "offline_valid", isLicensed: true, source: "local", message: "offline" },
+      storedState: {
+        schemaVersion: 2,
+        projectRef: "uziellpqviqtyquyaomr",
+        licenseKey: "PI-ABCDE-12345-FGHIJ-67890",
+        machineFingerprint: "fp",
+        activationCorrelationToken: "token",
+        licenseStatus: "active",
+        lastValidationState: "valid",
+        trustedUntil: "2026-04-10T00:00:00.000Z",
+        nextValidationRequiredAt: "2026-04-10T00:00:00.000Z",
+        lastValidatedAt: "2026-04-03T00:00:00.000Z",
+      },
+    });
+    validateLicenseMock.mockResolvedValue({
+      status: "valid",
+      isLicensed: true,
+      source: "remote",
+      message: "validated",
+    });
 
-    await expect(createLicenseService().importLicense("tampered-license")).rejects.toThrow("signature mismatch");
-    expect(saveLicenseMock).not.toHaveBeenCalled();
+    await expect(createLicenseService().validateCurrentState()).resolves.toMatchObject({
+      status: "valid",
+      isLicensed: true,
+    });
   });
 
-  it("replaces runtime state when a new license is imported manually", async () => {
-    verifyLicenseMock
-      .mockResolvedValueOnce({
-        customerName: "Cliente Demo",
-        licenseId: "LIC-001",
-        plan: "semiannual",
-        issuedAt: "2026-01-01T00:00:00.000Z",
-        expiresAt: "2026-06-30T00:00:00.000Z",
-      })
-      .mockResolvedValueOnce({
-        customerName: "Cliente Premium",
-        licenseId: "LIC-002",
-        plan: "annual",
-        issuedAt: "2026-01-01T00:00:00.000Z",
-        expiresAt: "2026-12-31T00:00:00.000Z",
-      });
+  it("returns null when there is no stored state to validate", async () => {
+    loadStoredLicenseStateMock.mockResolvedValue({
+      context: { status: "missing", isLicensed: false, source: "local", message: "missing" },
+      storedState: null,
+    });
 
-    const service = createLicenseService();
-    const firstState = await service.importLicense("license-a");
-    const secondState = await service.importLicense("license-b");
-
-    expect(firstState).toMatchObject({ plan: "semiannual", licenseId: "LIC-001" });
-    expect(secondState).toMatchObject({ plan: "annual", licenseId: "LIC-002" });
-    expect(saveLicenseMock).toHaveBeenNthCalledWith(1, "license-a");
-    expect(saveLicenseMock).toHaveBeenNthCalledWith(2, "license-b");
+    await expect(createLicenseService().validateCurrentState()).resolves.toBeNull();
   });
 });
