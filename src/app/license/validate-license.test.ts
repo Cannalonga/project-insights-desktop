@@ -13,7 +13,11 @@ const { validateLicenseRequestMock, getMachineFingerprintMock, saveStoredLicensi
 vi.mock("../../infrastructure/license/licensing-http-client", () => ({
   validateLicenseRequest: (...args: unknown[]) => validateLicenseRequestMock(...args),
   LicensingHttpError: class LicensingHttpError extends Error {
-    constructor(public readonly kind: "network" | "timeout" | "invalid_json", message: string) {
+    constructor(
+      public readonly kind: "network" | "timeout" | "invalid_json",
+      message: string,
+      public readonly diagnostics?: Record<string, unknown>,
+    ) {
       super(message);
     }
   },
@@ -63,6 +67,9 @@ describe("validateLicense", () => {
   it("renews trust when the backend returns valid", async () => {
     validateLicenseRequestMock.mockResolvedValue({
       status: 200,
+      elapsedMs: 110,
+      host: "uziellpqviqtyquyaomr.supabase.co",
+      operation: "validate-license",
       body: {
         success: true,
         code: "license_validation_result",
@@ -78,13 +85,16 @@ describe("validateLicense", () => {
 
     const state = await validateLicense(storedState);
 
-    expect(state).toMatchObject({ status: "valid", isLicensed: true });
+    expect(state).toMatchObject({ status: "VALID", isLicensed: true });
     expect(saveStoredLicensingStateMock).toHaveBeenCalledOnce();
   });
 
   it("clears local state when the backend returns revoked", async () => {
     validateLicenseRequestMock.mockResolvedValue({
       status: 200,
+      elapsedMs: 130,
+      host: "uziellpqviqtyquyaomr.supabase.co",
+      operation: "validate-license",
       body: {
         success: true,
         code: "license_validation_result",
@@ -100,17 +110,54 @@ describe("validateLicense", () => {
 
     const state = await validateLicense(storedState);
 
-    expect(state).toMatchObject({ status: "revoked", isLicensed: false });
+    expect(state).toMatchObject({ status: "REVOKED", isLicensed: false });
     expect(clearStoredLicensingStateMock).toHaveBeenCalled();
   });
 
   it("falls back to offline valid when the network fails inside the trust window", async () => {
     const HttpError = (await import("../../infrastructure/license/licensing-http-client")).LicensingHttpError;
-    validateLicenseRequestMock.mockRejectedValue(new HttpError("network", "offline"));
+    validateLicenseRequestMock.mockRejectedValue(
+      new HttpError("network", "offline", {
+        operation: "validate-license",
+        classifiedReason: "offline",
+        rawErrorName: "TypeError",
+        rawErrorMessage: "Failed to fetch",
+        elapsedMs: 54,
+        host: "uziellpqviqtyquyaomr.supabase.co",
+        stage: "connect",
+      }),
+    );
 
     const state = await validateLicense(storedState);
 
-    expect(state).toMatchObject({ status: "offline_valid", isLicensed: true });
+    expect(state).toMatchObject({ status: "OFFLINE_VALID", isLicensed: true });
+    expect(state.diagnostics).toMatchObject({ classifiedReason: "offline" });
     expect(saveStoredLicensingStateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a safe error on invalid payloads instead of treating them as valid", async () => {
+    validateLicenseRequestMock.mockResolvedValue({
+      status: 200,
+      elapsedMs: 75,
+      host: "uziellpqviqtyquyaomr.supabase.co",
+      operation: "validate-license",
+      body: {
+        success: true,
+        code: "license_validation_result",
+        data: {
+          state: "unexpected_state",
+          reason: "???",
+          license_status: "active",
+          trusted_until: null,
+          next_validation_required_at: null,
+        },
+      },
+    });
+
+    const state = await validateLicense(storedState);
+
+    expect(state).toMatchObject({ status: "ERROR", isLicensed: false });
+    expect(state.diagnostics).toMatchObject({ classifiedReason: "invalid_response" });
+    expect(clearStoredLicensingStateMock).not.toHaveBeenCalled();
   });
 });

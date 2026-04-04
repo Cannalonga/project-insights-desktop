@@ -21,23 +21,56 @@ export type LicenseValidationState =
   | "mismatch"
   | "invalid_license";
 
-export type LicenseStatus =
-  | "missing"
-  | "valid"
-  | "offline_valid"
-  | "expired"
-  | "invalid"
-  | "invalid_license"
-  | "revoked"
-  | "blocked"
-  | "mismatch"
-  | "validation_required";
+export type LicensingOperation = "activate-license" | "validate-license";
+
+export type LicensingFailureStage = "dns" | "tls" | "connect" | "response" | "parse" | "unknown";
+
+export type LicensingFailureReason =
+  | "dns"
+  | "tls"
+  | "connect_timeout"
+  | "read_timeout"
+  | "connection_refused"
+  | "proxy_or_intercepted"
+  | "http_4xx"
+  | "http_5xx"
+  | "invalid_response"
+  | "offline"
+  | "unknown_network";
+
+export type LicensingFailureDiagnostics = {
+  operation: LicensingOperation;
+  classifiedReason: LicensingFailureReason;
+  rawErrorName?: string;
+  rawErrorMessage?: string;
+  rawErrorCode?: string;
+  httpStatus?: number;
+  elapsedMs?: number;
+  host?: string;
+  stage: LicensingFailureStage;
+};
+
+export const LICENSE_CLIENT_STATES = {
+  NO_LICENSE: "NO_LICENSE",
+  ACTIVATING: "ACTIVATING",
+  VALID: "VALID",
+  OFFLINE_VALID: "OFFLINE_VALID",
+  INVALID: "INVALID",
+  REVOKED: "REVOKED",
+  EXPIRED: "EXPIRED",
+  MISMATCH: "MISMATCH",
+  BLOCKED: "BLOCKED",
+  ERROR: "ERROR",
+} as const;
+
+export type LicenseStatus = (typeof LICENSE_CLIENT_STATES)[keyof typeof LICENSE_CLIENT_STATES];
 
 export type LicenseContextState = {
   status: LicenseStatus;
   isLicensed: boolean;
   message: string;
   source: "local" | "remote";
+  diagnostics?: LicensingFailureDiagnostics;
   daysRemaining?: number;
   plan?: LicensePlan;
   customerName?: string;
@@ -84,4 +117,6 @@ export type PremiumFeature =
   | "export_machine_json"
   | "export_executive_report"
   | "executive_full_view"
-  | "recovery_full";
+  | "recovery_full"
+  | "comparison_task_lists"
+  | "trend_curve_detail";
