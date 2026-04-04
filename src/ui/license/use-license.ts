@@ -134,8 +134,11 @@ export function useLicense(): UseLicenseResult {
         const message =
           error instanceof Error
             ? error.message
-            : "Nao foi possivel carregar o estado de licenciamento desta maquina. Reinicie o app e tente novamente.";
+            : "Nao foi possivel ler o estado local de licenciamento desta maquina.";
         const errorName = error instanceof Error ? error.name : "UnknownError";
+        const fallbackState = buildNoLicenseState();
+        const noticeMessage =
+          "Nao foi possivel ler o estado local de licenciamento desta maquina. Voce pode tentar ativar a licenca novamente.";
 
         await appendOperationalLog({
           timestamp: nowIso(),
@@ -145,17 +148,16 @@ export function useLicense(): UseLicenseResult {
           source: "file",
           message,
           errorName,
+          rawErrorName: error instanceof Error ? error.name : undefined,
+          rawErrorMessage: error instanceof Error ? error.message : undefined,
           errorCategory: "license_state",
-          uiStateAfter: "ERROR",
+          uiStateAfter: fallbackState.status,
           buildVersion: LICENSING_BUILD_VERSION,
         });
 
         if (!cancelled) {
-          const failureState = buildErrorState(
-            "Nao foi possivel carregar o estado de licenciamento desta maquina. Reinicie o app e tente novamente.",
-          );
-          setNotice(failureState.message);
-          setLicense(failureState);
+          setNotice(noticeMessage);
+          setLicense(fallbackState);
         }
       } finally {
         if (!cancelled) {
