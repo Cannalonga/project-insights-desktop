@@ -7,7 +7,7 @@ import type {
 } from "../../core/license/license-types";
 import { nowIso } from "../../infrastructure/license/clock";
 import { activateLicenseRequest, LicensingHttpError } from "../../infrastructure/license/licensing-http-client";
-import { resolveLicensingConfig } from "../../infrastructure/license/licensing-config";
+import { LicensingConfigError, resolveLicensingConfig } from "../../infrastructure/license/licensing-config";
 import { getMachineFingerprint } from "../../infrastructure/license/machine-fingerprint";
 import { saveStoredLicensingState } from "../../infrastructure/license/license-state-storage";
 import {
@@ -37,6 +37,34 @@ export class LicenseActivationError extends Error {
     super(message);
     this.name = "LicenseActivationError";
   }
+}
+
+function readUnknownStringField(error: unknown, field: "name" | "message" | "code"): string | undefined {
+  if (typeof error !== "object" || error === null || !(field in error)) {
+    return undefined;
+  }
+
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function resolveLicensingHostSafely(): string | undefined {
+  try {
+    return new URL(resolveLicensingConfig().functionsBaseUrl).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildUnexpectedDiagnostics(error: unknown): LicensingFailureDiagnostics {
+  return {
+    operation: "activate-license",
+    rawErrorName: readUnknownStringField(error, "name"),
+    rawErrorMessage: readUnknownStringField(error, "message"),
+    rawErrorCode: readUnknownStringField(error, "code"),
+    host: resolveLicensingHostSafely(),
+    stage: "unknown",
+  };
 }
 
 function normalizeLicenseKey(raw: string): string {
@@ -137,23 +165,23 @@ function mapHttpError(error: LicensingHttpError): LicenseActivationError {
   if (error.kind === "timeout") {
     return new LicenseActivationError(
       "timeout",
-      buildConnectivityMessage(error.diagnostics.classifiedReason),
+      buildConnectivityMessage(error.diagnostics.classifiedReason!),
       error.diagnostics,
     );
   }
 
   return new LicenseActivationError(
     "network",
-    buildConnectivityMessage(error.diagnostics.classifiedReason),
+    buildConnectivityMessage(error.diagnostics.classifiedReason!),
     error.diagnostics,
   );
 }
 
 export async function activateLicense(licenseKeyInput: string): Promise<LicenseContextState> {
   const licenseKey = normalizeLicenseKey(licenseKeyInput);
-  const machineFingerprint = await getMachineFingerprint();
 
   try {
+    const machineFingerprint = await getMachineFingerprint();
     const response = await activateLicenseRequest(licenseKey, machineFingerprint);
 
     if (response.status >= 500) {
@@ -173,18 +201,34 @@ export async function activateLicense(licenseKeyInput: string): Promise<LicenseC
       return mapDeniedState(parsed.reason);
     }
 
-    await saveStoredLicensingState(
-      buildStoredLicenseState(
-        licenseKey,
-        machineFingerprint,
-        parsed.activationCorrelationToken,
-        parsed.trustedUntil,
-        parsed.nextValidationRequiredAt,
-      ),
-    );
+    try {
+      await saveStoredLicensingState(
+        buildStoredLicenseState(
+          licenseKey,
+          machineFingerprint,
+          parsed.activationCorrelationToken,
+          parsed.trustedUntil,
+          parsed.nextValidationRequiredAt,
+        ),
+      );
+    } catch (error) {
+      throw new LicenseActivationError(
+        "unexpected",
+        "A licenca foi aprovada, mas nao foi possivel salvar o estado local desta maquina. Tente novamente. Se o problema continuar, contate o suporte.",
+        buildUnexpectedDiagnostics(error),
+      );
+    }
 
     return buildValidState(parsed.trustedUntil, parsed.nextValidationRequiredAt);
   } catch (error) {
+    if (error instanceof LicensingConfigError) {
+      throw new LicenseActivationError(
+        "config",
+        "A configuracao local de licenciamento esta invalida. Reinstale o app ou contate o suporte.",
+        buildUnexpectedDiagnostics(error),
+      );
+    }
+
     if (error instanceof LicensingHttpError) {
       throw mapHttpError(error);
     }
@@ -207,6 +251,7 @@ export async function activateLicense(licenseKeyInput: string): Promise<LicenseC
     throw new LicenseActivationError(
       "unexpected",
       "Falha inesperada ao ativar a licenca. Tente novamente. Se o problema continuar, contate o suporte.",
+      buildUnexpectedDiagnostics(error),
     );
   }
 }

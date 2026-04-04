@@ -40,7 +40,7 @@ export type LicensingFailureReason =
 
 export type LicensingFailureDiagnostics = {
   operation: LicensingOperation;
-  classifiedReason: LicensingFailureReason;
+  classifiedReason?: LicensingFailureReason;
   rawErrorName?: string;
   rawErrorMessage?: string;
   rawErrorCode?: string;

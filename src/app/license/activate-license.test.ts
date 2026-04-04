@@ -31,6 +31,12 @@ vi.mock("../../infrastructure/license/license-state-storage", () => ({
 }));
 
 vi.mock("../../infrastructure/license/licensing-config", () => ({
+  LicensingConfigError: class LicensingConfigError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "LicensingConfigError";
+    }
+  },
   resolveLicensingConfig: () => resolveLicensingConfigMock(),
 }));
 
@@ -153,6 +159,70 @@ describe("activateLicense", () => {
         classifiedReason: "dns",
         stage: "dns",
         host: "uziellpqviqtyquyaomr.supabase.co",
+      }),
+    });
+  });
+
+  it("preserves raw diagnostics when machine fingerprint retrieval fails before the request", async () => {
+    getMachineFingerprintMock.mockRejectedValue({
+      name: "InvokeError",
+      message: "machine fingerprint command failed",
+      code: "TAURI_INVOKE_ERR",
+    });
+
+    await expect(activateLicense("PI-ABCDE-12345-FGHIJ-67890")).rejects.toMatchObject({
+      code: "unexpected",
+      diagnostics: expect.objectContaining({
+        operation: "activate-license",
+        stage: "unknown",
+        rawErrorName: "InvokeError",
+        rawErrorMessage: "machine fingerprint command failed",
+        rawErrorCode: "TAURI_INVOKE_ERR",
+      }),
+    });
+    expect(activateLicenseRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves raw diagnostics when local state persistence fails after approval", async () => {
+    activateLicenseRequestMock.mockResolvedValue({
+      status: 200,
+      elapsedMs: 120,
+      host: "uziellpqviqtyquyaomr.supabase.co",
+      operation: "activate-license",
+      body: {
+        success: true,
+        code: "activation_approved",
+        data: {
+          approved: true,
+          reason: "first_activation",
+          license_status: "active",
+          activation: {
+            activation_id: "act-1",
+            machine_fingerprint: "fingerprint-a",
+            first_activated_at: "2026-04-03T00:00:00.000Z",
+          },
+          activation_token: "token-a",
+          trusted_until: "2099-04-10T00:00:00.000Z",
+          next_validation_required_at: "2099-04-10T00:00:00.000Z",
+        },
+      },
+    });
+    saveStoredLicensingStateMock.mockRejectedValue({
+      name: "InvokeError",
+      message: "failed to persist local licensing state",
+      code: "SAVE_STATE_ERR",
+    });
+
+    await expect(activateLicense("PI-ABCDE-12345-FGHIJ-67890")).rejects.toMatchObject({
+      code: "unexpected",
+      message:
+        "A licenca foi aprovada, mas nao foi possivel salvar o estado local desta maquina. Tente novamente. Se o problema continuar, contate o suporte.",
+      diagnostics: expect.objectContaining({
+        operation: "activate-license",
+        stage: "unknown",
+        rawErrorName: "InvokeError",
+        rawErrorMessage: "failed to persist local licensing state",
+        rawErrorCode: "SAVE_STATE_ERR",
       }),
     });
   });
