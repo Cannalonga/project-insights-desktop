@@ -23,7 +23,20 @@ export type LicenseValidationState =
 
 export type LicensingOperation = "activate-license" | "validate-license";
 
-export type LicensingFailureStage = "dns" | "tls" | "connect" | "response" | "parse" | "unknown";
+export type LicensingFailureStage =
+  | "fingerprint_start"
+  | "fingerprint_done"
+  | "http_start"
+  | "http_response"
+  | "parse_done"
+  | "persist_start"
+  | "persist_done"
+  | "dns"
+  | "tls"
+  | "connect"
+  | "response"
+  | "parse"
+  | "unknown";
 
 export type LicensingFailureReason =
   | "dns"

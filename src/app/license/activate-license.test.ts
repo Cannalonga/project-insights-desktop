@@ -2,11 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { activateLicense, LicenseActivationError } from "./activate-license";
 
-const { activateLicenseRequestMock, getMachineFingerprintMock, saveStoredLicensingStateMock, resolveLicensingConfigMock } = vi.hoisted(() => ({
+const {
+  activateLicenseRequestMock,
+  getMachineFingerprintMock,
+  saveStoredLicensingStateMock,
+  resolveLicensingConfigMock,
+  appendOperationalLogMock,
+} = vi.hoisted(() => ({
   activateLicenseRequestMock: vi.fn(),
   getMachineFingerprintMock: vi.fn(),
   saveStoredLicensingStateMock: vi.fn(),
   resolveLicensingConfigMock: vi.fn(),
+  appendOperationalLogMock: vi.fn(),
 }));
 
 vi.mock("../../infrastructure/license/licensing-http-client", () => ({
@@ -40,12 +47,17 @@ vi.mock("../../infrastructure/license/licensing-config", () => ({
   resolveLicensingConfig: () => resolveLicensingConfigMock(),
 }));
 
+vi.mock("../use-cases/app-log", () => ({
+  appendOperationalLog: (...args: unknown[]) => appendOperationalLogMock(...args),
+}));
+
 describe("activateLicense", () => {
   beforeEach(() => {
     activateLicenseRequestMock.mockReset();
     getMachineFingerprintMock.mockReset();
     saveStoredLicensingStateMock.mockReset();
     resolveLicensingConfigMock.mockReset();
+    appendOperationalLogMock.mockReset();
     resolveLicensingConfigMock.mockReturnValue({ projectRef: "uziellpqviqtyquyaomr" });
     getMachineFingerprintMock.mockResolvedValue("fingerprint-a");
   });
@@ -79,6 +91,27 @@ describe("activateLicense", () => {
 
     expect(state).toMatchObject({ status: "VALID", isLicensed: true });
     expect(saveStoredLicensingStateMock).toHaveBeenCalledOnce();
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "fingerprint_start" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "fingerprint_done" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "http_start" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "http_response" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "parse_done" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "persist_start" }),
+    );
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "license_apply_checkpoint", stage: "persist_done" }),
+    );
   });
 
   it("maps bound licenses to mismatch without persisting a new valid state", async () => {
@@ -174,13 +207,21 @@ describe("activateLicense", () => {
       code: "unexpected",
       diagnostics: expect.objectContaining({
         operation: "activate-license",
-        stage: "unknown",
+        stage: "fingerprint_start",
         rawErrorName: "InvokeError",
         rawErrorMessage: "machine fingerprint command failed",
         rawErrorCode: "TAURI_INVOKE_ERR",
       }),
     });
     expect(activateLicenseRequestMock).not.toHaveBeenCalled();
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "license_apply_checkpoint",
+        outcome: "failure",
+        stage: "fingerprint_start",
+        rawErrorName: "InvokeError",
+      }),
+    );
   });
 
   it("preserves raw diagnostics when local state persistence fails after approval", async () => {
@@ -219,11 +260,19 @@ describe("activateLicense", () => {
         "A licenca foi aprovada, mas nao foi possivel salvar o estado local desta maquina. Tente novamente. Se o problema continuar, contate o suporte.",
       diagnostics: expect.objectContaining({
         operation: "activate-license",
-        stage: "unknown",
+        stage: "persist_start",
         rawErrorName: "InvokeError",
         rawErrorMessage: "failed to persist local licensing state",
         rawErrorCode: "SAVE_STATE_ERR",
       }),
     });
+    expect(appendOperationalLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "license_apply_checkpoint",
+        outcome: "failure",
+        stage: "persist_start",
+        rawErrorCode: "SAVE_STATE_ERR",
+      }),
+    );
   });
 });

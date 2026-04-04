@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 export type OperationalLogEvent =
   | "license_apply_success"
   | "license_apply_failed"
+  | "license_apply_checkpoint"
   | "license_state_loaded"
   | "license_state_load_failed"
   | "license_refresh_result"
@@ -39,7 +40,20 @@ export type LicensingLogClassifiedReason =
   | "offline"
   | "unknown_network";
 
-export type LicensingLogStage = "dns" | "tls" | "connect" | "response" | "parse" | "unknown";
+export type LicensingLogStage =
+  | "fingerprint_start"
+  | "fingerprint_done"
+  | "http_start"
+  | "http_response"
+  | "parse_done"
+  | "persist_start"
+  | "persist_done"
+  | "dns"
+  | "tls"
+  | "connect"
+  | "response"
+  | "parse"
+  | "unknown";
 
 export type OperationalLogPayload = {
   timestamp: string;
