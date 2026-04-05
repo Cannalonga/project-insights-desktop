@@ -34,11 +34,11 @@ describe("loadStoredLicenseState", () => {
     resolveLicensingConfigMock.mockReturnValue({ projectRef: "uziellpqviqtyquyaomr" });
   });
 
-  it("returns missing when there is no persisted state", async () => {
+  it("returns no-license when there is no persisted state", async () => {
     loadStoredLicensingStateMock.mockResolvedValue({ status: "missing" });
 
     await expect(loadStoredLicenseState()).resolves.toMatchObject({
-      context: { status: "missing", isLicensed: false },
+      context: { status: "NO_LICENSE", isLicensed: false },
       storedState: null,
     });
   });
@@ -54,6 +54,7 @@ describe("loadStoredLicenseState", () => {
         activationCorrelationToken: "token",
         licenseStatus: "active",
         lastValidationState: "valid",
+        expiresAt: "2027-04-05T00:00:00.000Z",
         trustedUntil: "2099-04-10T00:00:00.000Z",
         nextValidationRequiredAt: "2099-04-10T00:00:00.000Z",
         lastValidatedAt: "2026-04-03T00:00:00.000Z",
@@ -62,7 +63,31 @@ describe("loadStoredLicenseState", () => {
     getMachineFingerprintMock.mockResolvedValue("fingerprint-a");
 
     await expect(loadStoredLicenseState()).resolves.toMatchObject({
-      context: { status: "offline_valid", isLicensed: true },
+      context: { status: "OFFLINE_VALID", isLicensed: true, expiresAt: "2027-04-05T00:00:00.000Z" },
+    });
+  });
+
+  it("returns error when the trust window expired and revalidation is required", async () => {
+    loadStoredLicensingStateMock.mockResolvedValue({
+      status: "loaded",
+      state: {
+        schemaVersion: 2,
+        projectRef: "uziellpqviqtyquyaomr",
+        licenseKey: "PI-ABCDE-12345-FGHIJ-67890",
+        machineFingerprint: "fingerprint-a",
+        activationCorrelationToken: "token",
+        licenseStatus: "active",
+        lastValidationState: "valid",
+        expiresAt: "2027-04-05T00:00:00.000Z",
+        trustedUntil: "2020-04-10T00:00:00.000Z",
+        nextValidationRequiredAt: "2020-04-10T00:00:00.000Z",
+        lastValidatedAt: "2020-04-03T00:00:00.000Z",
+      },
+    });
+    getMachineFingerprintMock.mockResolvedValue("fingerprint-a");
+
+    await expect(loadStoredLicenseState()).resolves.toMatchObject({
+      context: { status: "ERROR", isLicensed: false },
     });
   });
 
@@ -77,6 +102,7 @@ describe("loadStoredLicenseState", () => {
         activationCorrelationToken: "token",
         licenseStatus: "active",
         lastValidationState: "valid",
+        expiresAt: "2027-04-05T00:00:00.000Z",
         trustedUntil: "2099-04-10T00:00:00.000Z",
         nextValidationRequiredAt: "2099-04-10T00:00:00.000Z",
         lastValidatedAt: "2026-04-03T00:00:00.000Z",
@@ -85,7 +111,7 @@ describe("loadStoredLicenseState", () => {
     getMachineFingerprintMock.mockResolvedValue("fingerprint-b");
 
     await expect(loadStoredLicenseState()).resolves.toMatchObject({
-      context: { status: "mismatch", isLicensed: false },
+      context: { status: "MISMATCH", isLicensed: false },
       storedState: null,
     });
     expect(clearInvalidLicenseStateMock).toHaveBeenCalled();

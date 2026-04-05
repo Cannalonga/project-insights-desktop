@@ -49,6 +49,7 @@ describe("validateLicense", () => {
     activationCorrelationToken: "token-a",
     licenseStatus: "active" as const,
     lastValidationState: "valid" as const,
+    expiresAt: "2027-04-05T00:00:00.000Z",
     trustedUntil: "2099-04-10T00:00:00.000Z",
     nextValidationRequiredAt: "2099-04-10T00:00:00.000Z",
     lastValidatedAt: "2026-04-03T00:00:00.000Z",
@@ -77,6 +78,7 @@ describe("validateLicense", () => {
           state: "valid",
           reason: "validated",
           license_status: "active",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: "2099-05-10T00:00:00.000Z",
           next_validation_required_at: "2099-05-10T00:00:00.000Z",
         },
@@ -85,8 +87,11 @@ describe("validateLicense", () => {
 
     const state = await validateLicense(storedState);
 
-    expect(state).toMatchObject({ status: "VALID", isLicensed: true });
+    expect(state).toMatchObject({ status: "VALID", isLicensed: true, expiresAt: "2027-04-05T00:00:00.000Z" });
     expect(saveStoredLicensingStateMock).toHaveBeenCalledOnce();
+    expect(saveStoredLicensingStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ expiresAt: "2027-04-05T00:00:00.000Z" }),
+    );
   });
 
   it("clears local state when the backend returns revoked", async () => {
@@ -102,6 +107,7 @@ describe("validateLicense", () => {
           state: "revoked",
           reason: "revoked",
           license_status: "revoked",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: null,
           next_validation_required_at: null,
         },
@@ -148,6 +154,7 @@ describe("validateLicense", () => {
           state: "unexpected_state",
           reason: "???",
           license_status: "active",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: null,
           next_validation_required_at: null,
         },

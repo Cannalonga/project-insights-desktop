@@ -16,10 +16,29 @@ type RawApiFailure = {
   };
 };
 
+const ACTIVATE_APPROVED_REASONS = ["first_activation", "already_active_same_machine"] as const;
+const ACTIVATE_DENIED_REASONS = [
+  "invalid_license",
+  "expired",
+  "revoked",
+  "blocked",
+  "license_already_bound",
+  "rate_limited",
+] as const;
+const VALIDATE_STATES: LicenseValidationState[] = [
+  "valid",
+  "revoked",
+  "expired",
+  "blocked",
+  "mismatch",
+  "invalid_license",
+];
+
 export type ActivateLicenseApproved = {
   approved: true;
-  reason: "first_activation" | "already_active_same_machine";
+  reason: (typeof ACTIVATE_APPROVED_REASONS)[number];
   licenseStatus: "active";
+  expiresAt: string | null;
   activation: {
     activationId: string;
     machineFingerprint: string;
@@ -34,14 +53,9 @@ export type ActivateLicenseApproved = {
 
 export type ActivateLicenseDenied = {
   approved: false;
-  reason:
-    | "invalid_license"
-    | "expired"
-    | "revoked"
-    | "blocked"
-    | "license_already_bound"
-    | "rate_limited";
+  reason: (typeof ACTIVATE_DENIED_REASONS)[number];
   licenseStatus: string;
+  expiresAt: string | null;
 };
 
 export type ActivateLicenseResponse = ActivateLicenseApproved | ActivateLicenseDenied;
@@ -50,6 +64,7 @@ export type ValidateLicenseResponse = {
   state: LicenseValidationState;
   reason: string;
   licenseStatus: string;
+  expiresAt: string | null;
   trustedUntil: string | null;
   nextValidationRequiredAt: string | null;
 };
@@ -96,6 +111,22 @@ function getBoolean(record: JsonRecord, key: string): boolean {
   return value;
 }
 
+function expectOneOf<T extends readonly string[]>(value: string, allowed: T, key: string): T[number] {
+  if (!allowed.includes(value)) {
+    throw new LicensingContractError(`Unexpected ${key}: ${value}`);
+  }
+
+  return value as T[number];
+}
+
+function expectValidationState(value: string): LicenseValidationState {
+  if (!VALIDATE_STATES.includes(value as LicenseValidationState)) {
+    throw new LicensingContractError(`Unexpected validation state: ${value}`);
+  }
+
+  return value as LicenseValidationState;
+}
+
 function parseApiEnvelope(input: unknown): RawApiSuccess | RawApiFailure {
   if (!isRecord(input) || typeof input.code !== "string" || typeof input.success !== "boolean") {
     throw new LicensingContractError("Invalid API envelope.");
@@ -139,8 +170,9 @@ export function parseActivateLicenseResponse(input: unknown): ActivateLicenseRes
   if (!approved) {
     return {
       approved: false,
-      reason: reason as ActivateLicenseDenied["reason"],
+      reason: expectOneOf(reason, ACTIVATE_DENIED_REASONS, "activation denial reason"),
       licenseStatus,
+      expiresAt: getOptionalString(envelope.data, "expires_at"),
     };
   }
 
@@ -151,8 +183,9 @@ export function parseActivateLicenseResponse(input: unknown): ActivateLicenseRes
 
   return {
     approved: true,
-    reason: reason as ActivateLicenseApproved["reason"],
+    reason: expectOneOf(reason, ACTIVATE_APPROVED_REASONS, "activation approval reason"),
     licenseStatus: "active",
+    expiresAt: getOptionalString(envelope.data, "expires_at"),
     activation: {
       activationId: getString(activationRaw, "activation_id"),
       machineFingerprint: getString(activationRaw, "machine_fingerprint"),
@@ -171,9 +204,10 @@ export function parseValidateLicenseResponse(input: unknown): ValidateLicenseRes
   }
 
   return {
-    state: getString(envelope.data, "state") as LicenseValidationState,
+    state: expectValidationState(getString(envelope.data, "state")),
     reason: getString(envelope.data, "reason"),
     licenseStatus: getString(envelope.data, "license_status"),
+    expiresAt: getOptionalString(envelope.data, "expires_at"),
     trustedUntil: getOptionalString(envelope.data, "trusted_until"),
     nextValidationRequiredAt: getOptionalString(envelope.data, "next_validation_required_at"),
   };

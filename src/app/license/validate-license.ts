@@ -27,12 +27,14 @@ import {
 
 function rebuildStoredState(
   storedState: StoredLicenseState,
+  expiresAt: string | null,
   trustedUntil: string,
   nextValidationRequiredAt: string,
 ): StoredLicenseState {
   return {
     ...storedState,
     projectRef: resolveLicensingConfig().projectRef,
+    expiresAt: expiresAt ?? storedState.expiresAt,
     trustedUntil,
     nextValidationRequiredAt,
     lastValidatedAt: nowIso(),
@@ -85,6 +87,7 @@ export async function validateLicense(storedState: StoredLicenseState): Promise<
           storedState.nextValidationRequiredAt,
           "server",
           diagnostics,
+          storedState.expiresAt,
         );
       }
 
@@ -108,9 +111,9 @@ export async function validateLicense(storedState: StoredLicenseState): Promise<
         }
 
         await saveStoredLicensingState(
-          rebuildStoredState(storedState, parsed.trustedUntil, parsed.nextValidationRequiredAt),
+          rebuildStoredState(storedState, parsed.expiresAt, parsed.trustedUntil, parsed.nextValidationRequiredAt),
         );
-        return buildValidState(parsed.trustedUntil, parsed.nextValidationRequiredAt);
+        return buildValidState(parsed.trustedUntil, parsed.nextValidationRequiredAt, parsed.expiresAt ?? storedState.expiresAt);
       case "revoked":
         await clearInvalidLicenseState();
         return buildRevokedState();
@@ -150,6 +153,7 @@ export async function validateLicense(storedState: StoredLicenseState): Promise<
           storedState.nextValidationRequiredAt,
           error.kind,
           error.diagnostics,
+          storedState.expiresAt,
         );
       }
 

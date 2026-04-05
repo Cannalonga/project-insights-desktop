@@ -162,6 +162,7 @@ function buildStoredLicenseState(
   licenseKey: string,
   machineFingerprint: string,
   activationCorrelationToken: string,
+  expiresAt: string | null,
   trustedUntil: string,
   nextValidationRequiredAt: string,
 ): StoredLicenseState {
@@ -173,6 +174,7 @@ function buildStoredLicenseState(
     activationCorrelationToken,
     licenseStatus: "active",
     lastValidationState: "valid",
+    expiresAt: expiresAt ?? undefined,
     trustedUntil,
     nextValidationRequiredAt,
     lastValidatedAt: nowIso(),
@@ -272,6 +274,7 @@ export async function activateLicense(licenseKeyInput: string): Promise<LicenseC
           licenseKey,
           machineFingerprint,
           parsed.activationCorrelationToken,
+          parsed.expiresAt,
           parsed.trustedUntil,
           parsed.nextValidationRequiredAt,
         ),
@@ -291,7 +294,7 @@ export async function activateLicense(licenseKeyInput: string): Promise<LicenseC
       );
     }
 
-    return buildValidState(parsed.trustedUntil, parsed.nextValidationRequiredAt);
+    return buildValidState(parsed.trustedUntil, parsed.nextValidationRequiredAt, parsed.expiresAt);
   } catch (error) {
     if (error instanceof LicensingConfigError) {
       throw new LicenseActivationError(

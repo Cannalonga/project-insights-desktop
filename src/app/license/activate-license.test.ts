@@ -81,6 +81,7 @@ describe("activateLicense", () => {
             first_activated_at: "2026-04-03T00:00:00.000Z",
           },
           activation_token: "token-a",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: "2099-04-10T00:00:00.000Z",
           next_validation_required_at: "2099-04-10T00:00:00.000Z",
         },
@@ -89,8 +90,11 @@ describe("activateLicense", () => {
 
     const state = await activateLicense("PI-ABCDE-12345-FGHIJ-67890");
 
-    expect(state).toMatchObject({ status: "VALID", isLicensed: true });
+    expect(state).toMatchObject({ status: "VALID", isLicensed: true, expiresAt: "2027-04-05T00:00:00.000Z" });
     expect(saveStoredLicensingStateMock).toHaveBeenCalledOnce();
+    expect(saveStoredLicensingStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ expiresAt: "2027-04-05T00:00:00.000Z" }),
+    );
     expect(appendOperationalLogMock).toHaveBeenCalledWith(
       expect.objectContaining({ event: "license_apply_checkpoint", stage: "fingerprint_start" }),
     );
@@ -156,6 +160,7 @@ describe("activateLicense", () => {
             first_activated_at: "2026-04-03T00:00:00.000Z",
           },
           activation_token: "token-a",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: "2099-04-10T00:00:00.000Z",
           next_validation_required_at: "2099-04-10T00:00:00.000Z",
         },
@@ -243,6 +248,7 @@ describe("activateLicense", () => {
             first_activated_at: "2026-04-03T00:00:00.000Z",
           },
           activation_token: "token-a",
+          expires_at: "2027-04-05T00:00:00.000Z",
           trusted_until: "2099-04-10T00:00:00.000Z",
           next_validation_required_at: "2099-04-10T00:00:00.000Z",
         },

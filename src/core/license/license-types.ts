@@ -105,6 +105,7 @@ export type StoredLicenseState = {
   activationCorrelationToken: string;
   licenseStatus: "active";
   lastValidationState: "valid";
+  expiresAt?: string;
   trustedUntil: string;
   nextValidationRequiredAt: string;
   lastValidatedAt: string;
@@ -118,6 +119,7 @@ export type LegacyStoredLicenseState = {
   activationToken: string;
   licenseStatus: "active";
   lastValidationState: "valid";
+  expiresAt?: string;
   trustedUntil: string;
   nextValidationRequiredAt: string;
   lastValidatedAt: string;

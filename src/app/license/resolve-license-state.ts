@@ -85,20 +85,23 @@ export function buildErrorState(
 export function buildOfflineValidState(
   trustedUntil: string,
   nextValidationRequiredAt: string,
+  expiresAt?: string,
   message = "Modo offline ativo. Conecte a internet para validar novamente antes do prazo informado.",
 ): LicenseContextState {
   return buildState(LICENSE_CLIENT_STATES.OFFLINE_VALID, message, "local", {
+    expiresAt,
     trustedUntil,
     nextValidationRequiredAt,
   });
 }
 
-export function buildValidState(trustedUntil: string, nextValidationRequiredAt: string): LicenseContextState {
+export function buildValidState(trustedUntil: string, nextValidationRequiredAt: string, expiresAt?: string | null): LicenseContextState {
   return buildState(
     LICENSE_CLIENT_STATES.VALID,
     "Licenca validada com sucesso. Voce pode usar o app normalmente.",
     "remote",
     {
+      expiresAt: expiresAt ?? undefined,
       trustedUntil,
       nextValidationRequiredAt,
       lastValidatedAt: new Date().toISOString(),
@@ -147,6 +150,7 @@ export function buildNetworkFallbackState(
   nextValidationRequiredAt: string,
   reason: "network" | "timeout" | "server" = "network",
   diagnostics?: LicensingFailureDiagnostics,
+  expiresAt?: string,
 ): LicenseContextState {
   const message =
     reason === "timeout"
@@ -158,6 +162,7 @@ export function buildNetworkFallbackState(
           : "Modo offline ativo. Sem conexao com o servico de licenciamento. Conecte a internet para validar novamente.";
 
   return buildState(LICENSE_CLIENT_STATES.OFFLINE_VALID, message, "local", {
+    expiresAt,
     trustedUntil,
     nextValidationRequiredAt,
     diagnostics,

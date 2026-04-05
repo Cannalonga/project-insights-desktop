@@ -26,6 +26,7 @@ function isLegacyStoredLicenseState(value: unknown): value is LegacyStoredLicens
     typeof value.activationToken === "string" &&
     value.licenseStatus === "active" &&
     value.lastValidationState === "valid" &&
+    (value.expiresAt === undefined || typeof value.expiresAt === "string") &&
     typeof value.trustedUntil === "string" &&
     typeof value.nextValidationRequiredAt === "string" &&
     typeof value.lastValidatedAt === "string"
@@ -45,6 +46,7 @@ function isStoredLicenseState(value: unknown): value is StoredLicenseState {
     typeof value.activationCorrelationToken === "string" &&
     value.licenseStatus === "active" &&
     value.lastValidationState === "valid" &&
+    (value.expiresAt === undefined || typeof value.expiresAt === "string") &&
     typeof value.trustedUntil === "string" &&
     typeof value.nextValidationRequiredAt === "string" &&
     typeof value.lastValidatedAt === "string"
@@ -64,6 +66,7 @@ function normalizeStoredState(value: StoredLicenseStateCandidate): StoredLicense
     activationCorrelationToken: value.activationToken,
     licenseStatus: value.licenseStatus,
     lastValidationState: value.lastValidationState,
+    expiresAt: value.expiresAt,
     trustedUntil: value.trustedUntil,
     nextValidationRequiredAt: value.nextValidationRequiredAt,
     lastValidatedAt: value.lastValidatedAt,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { LicenseContextState } from "../../core/license/license-types";
+import { LICENSE_CLIENT_STATES, type LicenseContextState } from "../../core/license/license-types";
 
 type LicensePanelProps = {
   license: LicenseContextState;
@@ -11,7 +11,7 @@ type LicensePanelProps = {
   onExportLogs: () => Promise<void>;
 };
 
-function formatDate(value?: string): string {
+function formatDateTime(value?: string): string {
   if (!value) {
     return "n/a";
   }
@@ -21,52 +21,48 @@ function formatDate(value?: string): string {
     return value;
   }
 
-  return parsed.toLocaleDateString("pt-BR");
+  return parsed.toLocaleString("pt-BR");
 }
 
 function resolveStatusTitle(license: LicenseContextState): string {
   switch (license.status) {
-    case "valid":
+    case LICENSE_CLIENT_STATES.ACTIVATING:
+      return "Ativando licença";
+    case LICENSE_CLIENT_STATES.VALID:
       return "Licença ativa";
-    case "expired":
+    case LICENSE_CLIENT_STATES.OFFLINE_VALID:
+      return "Licença ativa em modo offline";
+    case LICENSE_CLIENT_STATES.REVOKED:
+      return "Licença revogada";
+    case LICENSE_CLIENT_STATES.BLOCKED:
+      return "Licença bloqueada";
+    case LICENSE_CLIENT_STATES.EXPIRED:
       return "Licença expirada";
-    case "invalid":
+    case LICENSE_CLIENT_STATES.MISMATCH:
+      return "Licença vinculada a outro dispositivo";
+    case LICENSE_CLIENT_STATES.INVALID:
       return "Licença inválida";
+    case LICENSE_CLIENT_STATES.ERROR:
+      return "Validação necessária";
+    case LICENSE_CLIENT_STATES.NO_LICENSE:
     default:
       return "Modo demonstração ativo";
   }
 }
 
-function resolvePlanLabel(license: LicenseContextState): string {
-  if (license.status === "missing") {
-    return "Demo";
+function resolveTrustStatus(license: LicenseContextState): string {
+  switch (license.status) {
+    case LICENSE_CLIENT_STATES.VALID:
+      return "Validado online";
+    case LICENSE_CLIENT_STATES.OFFLINE_VALID:
+      return "Janela offline ativa";
+    case LICENSE_CLIENT_STATES.ACTIVATING:
+      return "Processando ativação";
+    case LICENSE_CLIENT_STATES.ERROR:
+      return "Ação necessária";
+    default:
+      return "Não validado";
   }
-
-  if (license.plan === "semiannual") {
-    return "Semestral";
-  }
-
-  if (license.plan === "annual") {
-    return "Anual";
-  }
-
-  return license.plan ?? "n/a";
-}
-
-function resolveDaysRemaining(license: LicenseContextState): string {
-  if (license.daysRemaining === undefined) {
-    return "n/a";
-  }
-
-  return String(license.daysRemaining);
-}
-
-function resolveStatusMessage(license: LicenseContextState): string {
-  if (license.status === "valid") {
-    return `Licença ativa (${resolvePlanLabel(license).toLowerCase()}).`;
-  }
-
-  return license.message;
 }
 
 export function LicensePanel({
@@ -107,44 +103,54 @@ export function LicensePanel({
       <div className="compact-license-header">
         <div>
           <p className="panel-kicker">Licença</p>
-          <h3 className="support-chart-title">{loading ? "Verificando licença..." : resolveStatusTitle(license)}</h3>
-          <p className="panel-description">{loading ? "Validando o acesso local aos recursos premium." : resolveStatusMessage(license)}</p>
+          <h3 className="support-chart-title">
+            {loading ? "Verificando licença..." : resolveStatusTitle(license)}
+          </h3>
+          <p className="panel-description">
+            {loading
+              ? "Checando o estado local e a última janela de confiança offline desta máquina."
+              : license.message}
+          </p>
         </div>
         {!expanded ? (
           <button type="button" className="secondary-button" onClick={() => setExpanded(true)} disabled={loading || importing}>
-            Aplicar licença
+            Ativar licença
           </button>
         ) : null}
       </div>
 
       <div className="license-panel-metrics compact-license-metrics">
         <div className="metric-card compact-metric-card">
-          <span className="metric-label">Plano</span>
-          <strong>{resolvePlanLabel(license)}</strong>
+          <span className="metric-label">Estado</span>
+          <strong>{resolveTrustStatus(license)}</strong>
         </div>
         <div className="metric-card compact-metric-card">
-          <span className="metric-label">Validade</span>
-          <strong>{formatDate(license.expiresAt)}</strong>
+          <span className="metric-label">Validade da licença</span>
+          <strong>{formatDateTime(license.expiresAt)}</strong>
         </div>
         <div className="metric-card compact-metric-card">
-          <span className="metric-label">Dias restantes</span>
-          <strong>{resolveDaysRemaining(license)}</strong>
+          <span className="metric-label">Confiança offline até</span>
+          <strong>{formatDateTime(license.trustedUntil)}</strong>
+        </div>
+        <div className="metric-card compact-metric-card">
+          <span className="metric-label">Próxima validação</span>
+          <strong>{formatDateTime(license.nextValidationRequiredAt)}</strong>
         </div>
       </div>
 
       {expanded ? (
         <div className="license-apply-panel compact-license-apply-panel">
-          <p className="license-apply-hint">Cole a licença recebida e clique em aplicar.</p>
+          <p className="license-apply-hint">Cole a chave de licença recebida e clique em ativar.</p>
           <textarea
             ref={textareaRef}
             className="license-apply-textarea"
-            rows={7}
+            rows={4}
             defaultValue=""
-            placeholder="Cole sua licença aqui"
+            placeholder="Ex.: PI-ABCDE-12345-FGHIJ-67890"
           />
           <div className="license-inline-actions">
             <button type="button" className="primary-button" onClick={() => void handleApply()} disabled={loading || importing}>
-              {importing ? "Aplicando..." : "Aplicar licença"}
+              {importing ? "Ativando..." : "Ativar licença"}
             </button>
             <button type="button" className="secondary-button" onClick={() => setExpanded(false)}>
               Fechar
