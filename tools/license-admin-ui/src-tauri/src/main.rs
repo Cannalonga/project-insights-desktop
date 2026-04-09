@@ -6,6 +6,8 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::get_license_admin_config,
+            commands::get_licensing_backend_status,
+            commands::proxy_licensing_admin_request,
             commands::generate_license,
             commands::validate_license,
             commands::save_license_record,

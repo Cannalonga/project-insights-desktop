@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const REGISTRY_DIR_NAME: &str = "registry";
@@ -132,6 +133,29 @@ struct StructuredError {
     details: Option<Value>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicensingBackendStatus {
+    admin_token_configured: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicensingAdminProxyInput {
+    functions_base_url: String,
+    anon_key: String,
+    timeout_ms: u64,
+    path: String,
+    payload: Value,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LicensingAdminProxyResponse {
+    status: u16,
+    body: String,
+}
+
 #[derive(Debug)]
 struct CommandError {
     code: &'static str,
@@ -184,6 +208,76 @@ pub fn get_license_admin_config() -> Result<LicenseAdminConfig, String> {
         registry_file_path: paths.registry_file_path.display().to_string(),
         config_status,
     })
+}
+
+#[tauri::command]
+pub fn get_licensing_backend_status() -> Result<LicensingBackendStatus, String> {
+    Ok(LicensingBackendStatus {
+        admin_token_configured: read_secure_admin_token().is_ok(),
+    })
+}
+
+#[tauri::command]
+pub async fn proxy_licensing_admin_request(input: String) -> Result<LicensingAdminProxyResponse, String> {
+    let parsed: LicensingAdminProxyInput = serde_json::from_str(&input).map_err(|error| {
+        structured_error_string(error_with_code(
+            "invalid_admin_proxy_input",
+            "Falha ao preparar a chamada administrativa ao backend.".to_string(),
+            Some(json!({ "reason": error.to_string() })),
+        ))
+    })?;
+
+    let admin_token = read_secure_admin_token().map_err(structured_error_string)?;
+    let timeout_ms = parsed.timeout_ms.clamp(1000, 15000);
+    let url = format!("{}/{}", parsed.functions_base_url.trim_end_matches('/'), parsed.path.trim_start_matches('/'));
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(timeout_ms))
+        .build()
+        .map_err(|error| {
+            structured_error_string(error_with_code(
+                "admin_http_client_failed",
+                "Falha ao preparar a chamada administrativa ao backend.".to_string(),
+                Some(json!({ "reason": error.to_string() })),
+            ))
+        })?;
+
+    let authorization = format!("Bearer {}", parsed.anon_key);
+
+    let response = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .header("apikey", &parsed.anon_key)
+        .header("Authorization", authorization)
+        .header("x-admin-token", admin_token)
+        .json(&parsed.payload)
+        .send()
+        .await
+        .map_err(|error| {
+            let code = if error.is_timeout() { "timeout" } else { "network_error" };
+            let message = if error.is_timeout() {
+                "Tempo limite excedido ao chamar o backend.".to_string()
+            } else {
+                "Falha de rede ao chamar o backend.".to_string()
+            };
+
+            structured_error_string(error_with_code(
+                code,
+                message,
+                Some(json!({ "reason": error.to_string() })),
+            ))
+        })?;
+
+    let status = response.status().as_u16();
+    let body = response.text().await.map_err(|error| {
+        structured_error_string(error_with_code(
+            "admin_http_body_failed",
+            "Falha ao ler a resposta do backend.".to_string(),
+            Some(json!({ "reason": error.to_string() })),
+        ))
+    })?;
+
+    Ok(LicensingAdminProxyResponse { status, body })
 }
 
 #[tauri::command]
@@ -332,6 +426,53 @@ fn payload_overrides_from_generate(input: &str) -> Option<PathOverrides> {
     serde_json::from_str::<GenerateLicenseInput>(input)
         .ok()
         .and_then(|parsed| parsed.overrides)
+}
+
+fn read_secure_admin_token() -> Result<String, CommandError> {
+    read_first_non_empty(&["LICENSING_ADMIN_TOKEN", "VITE_LICENSING_ADMIN_TOKEN"])
+        .or_else(|| read_env_file_value("LICENSING_ADMIN_TOKEN"))
+        .or_else(|| read_env_file_value("VITE_LICENSING_ADMIN_TOKEN"))
+        .ok_or_else(|| {
+            error_with_code(
+                "missing_admin_token",
+                "LICENSING_ADMIN_TOKEN nao configurado no ambiente local seguro.".to_string(),
+                None,
+            )
+        })
+}
+
+fn read_first_non_empty(keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        env::var(key)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn read_env_file_value(key: &str) -> Option<String> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let env_path = manifest_dir.parent()?.join(".env.local");
+    let contents = fs::read_to_string(env_path).ok()?;
+
+    contents.lines().find_map(|line| {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return None;
+        }
+
+        let (entry_key, entry_value) = trimmed.split_once('=')?;
+        if entry_key.trim() != key {
+            return None;
+        }
+
+        let normalized = entry_value.trim().trim_matches('"').trim_matches('\'');
+        if normalized.is_empty() {
+            return None;
+        }
+
+        Some(normalized.to_string())
+    })
 }
 
 fn resolve_paths(overrides: Option<PathOverrides>) -> Result<ResolvedPaths, CommandError> {
