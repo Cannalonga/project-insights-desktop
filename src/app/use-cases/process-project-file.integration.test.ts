@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { processMPP, type ProcessInput, type ProcessResult } from "./process-mpp";
 import { processProjectFile } from "./process-project-file";
+
+const FIXED_GENERATED_AT = "2026-04-10T12:00:00.000Z";
 
 const validXml = `
   <Project xmlns="http://schemas.microsoft.com/project">
@@ -31,14 +34,32 @@ const validXml = `
   </Project>
 `;
 
+function freezeProcessingTime(): void {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(FIXED_GENERATED_AT));
+}
+
+function processWithoutHistory(input: ProcessInput): Promise<ProcessResult> {
+  return Promise.resolve(processMPP(input));
+}
+
 describe("processProjectFile integration", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("processes converted mpp and also supports direct xml fallback", async () => {
+    freezeProcessingTime();
+
     const mppResult = await processProjectFile(
       {
         filePath: "D:\\Projeto.mpp",
       },
       async () => validXml,
       async () => ({ extension: ".mpp", mimeType: "application/vnd.ms-project", sizeBytes: 1024 }),
+      async () => validXml,
+      { logEvent: async () => undefined },
+      processWithoutHistory,
     );
 
     const xmlResult = await processProjectFile(
@@ -48,6 +69,8 @@ describe("processProjectFile integration", () => {
       async () => validXml,
       async () => ({ extension: ".xml", mimeType: "application/xml", sizeBytes: 1024 }),
       async () => validXml,
+      { logEvent: async () => undefined },
+      processWithoutHistory,
     );
 
     expect(mppResult.model.name).toBe("Projeto Equivalente");
@@ -55,5 +78,6 @@ describe("processProjectFile integration", () => {
     expect(mppResult.insights.summary.status).toBeDefined();
     expect(xmlResult.model.name).toBe("Projeto Equivalente");
     expect(xmlResult.model.tasks).toHaveLength(2);
+    expect(mppResult).toEqual(xmlResult);
   });
 });
