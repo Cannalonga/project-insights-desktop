@@ -7,11 +7,9 @@ import {
 import type { Project } from "../../core/model/project";
 import type { ProjectComparison } from "../history/snapshot-history";
 import type { VersionComparisonSummary } from "../comparison/compare-project-versions";
-import { exportAnalyticalCSV } from "../../core/export/export-csv";
-import { exportToJSON } from "../../core/export/export-json";
-import { exportToXML } from "../../core/export/export-xml";
 import { mapRawProjectToModel } from "../../core/mapper/map-project";
 import { parseProject } from "../../core/parser/parse-project";
+import { buildProcessExports } from "./build-process-exports";
 
 export type ProcessResult = ProjectAnalysisResult & {
   analysisMode?: "single" | "comparison";
@@ -55,46 +53,10 @@ export function processMPP(input: ProcessInput): ProcessResult {
     throw error;
   }
 
-  const json = exportToJSON({
+  const { csv, json, structuredXml } = buildProcessExports({
     generatedAt,
-    project: model,
-    insights: analysis.insights,
-    score: analysis.score,
-    disciplines: analysis.disciplines,
-    weightModel: analysis.weightModel,
-    compensationAnalysis: analysis.compensationAnalysis,
-    compensationByDiscipline: analysis.compensationByDiscipline,
-    disciplineProgress: analysis.disciplineProgress,
-    sCurve: analysis.sCurve,
-    scheduleStatus: analysis.scheduleStatus,
-    analysisReliability: analysis.analysisReliability,
-  });
-  const structuredXml = exportToXML({
-    generatedAt,
-    project: model,
-    diagnostics: analysis.diagnostics,
-    diagnosticsAggregation: analysis.diagnosticsAggregation,
-    insights: analysis.insights,
-    score: analysis.score,
-    disciplines: analysis.disciplines,
-    weightModel: analysis.weightModel,
-    disciplineProgress: analysis.disciplineProgress,
-    sCurve: analysis.sCurve,
-    scheduleStatus: analysis.scheduleStatus,
-    analysisReliability: analysis.analysisReliability,
-    compensationAnalysis: analysis.compensationAnalysis,
-    compensationByDiscipline: analysis.compensationByDiscipline,
-  });
-  const csv = exportAnalyticalCSV({
-    project: model,
-    diagnostics: analysis.diagnostics,
-    insights: analysis.insights,
-    weightModel: analysis.weightModel,
-    generatedAt,
-    analysisReliability: analysis.analysisReliability,
-    scheduleStatus: analysis.scheduleStatus,
-    disciplineProgress: analysis.disciplineProgress,
-    sCurve: analysis.sCurve,
+    model,
+    analysis,
   });
 
   return {
