@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GapVsCompensation } from "../compensation/build-gap-vs-compensation";
 import type { Diagnostics } from "../diagnostics/build-diagnostics";
 import type { DiagnosticsAggregation } from "../diagnostics/build-diagnostics-aggregation";
-import type { MPPInputQualityAssessment } from "../input-quality/build-mpp-input-quality";
+import type { ProjectInputQualityAssessment } from "../input-quality/build-project-input-quality";
 import type { ProjectInsights } from "../insights/build-project-insights";
 import type { Project } from "../model/project";
 import type { DisciplineProgressAnalysis } from "../progress/build-discipline-progress";
@@ -157,7 +157,7 @@ function createGapVsCompensation(overrides: Partial<GapVsCompensation> = {}): Ga
   };
 }
 
-function createInputQuality(overrides: Partial<MPPInputQualityAssessment> = {}): MPPInputQualityAssessment {
+function createInputQuality(overrides: Partial<ProjectInputQualityAssessment> = {}): ProjectInputQualityAssessment {
   return {
     level: "non-fatal",
     summary: "O arquivo .mpp e utilizavel, mas a base apresenta limitacoes.",

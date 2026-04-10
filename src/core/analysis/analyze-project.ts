@@ -8,7 +8,10 @@ import { buildExecutiveAlerts, type ExecutiveAlert } from "../alerts/build-execu
 import { buildDiagnostics, type Diagnostics } from "../diagnostics/build-diagnostics";
 import { buildDiagnosticsAggregation, type DiagnosticsAggregation } from "../diagnostics/build-diagnostics-aggregation";
 import { buildProjectDisciplines, type ProjectDiscipline } from "../disciplines/build-project-disciplines";
-import { buildMPPInputQuality, type MPPInputQualityAssessment } from "../input-quality/build-mpp-input-quality";
+import {
+  buildProjectInputQuality,
+  type ProjectInputQualityAssessment,
+} from "../input-quality/build-project-input-quality";
 import { buildProjectInsights, type ProjectInsights } from "../insights/build-project-insights";
 import type { Project } from "../model/project";
 import { buildDisciplineProgress, type DisciplineProgressAnalysis } from "../progress/build-discipline-progress";
@@ -23,7 +26,7 @@ import { buildProjectWeightModel, type ProjectWeightModel } from "../weight/buil
 export type ProjectAnalysisResult = {
   diagnostics: Diagnostics;
   diagnosticsAggregation: DiagnosticsAggregation;
-  inputQuality?: MPPInputQualityAssessment;
+  inputQuality?: ProjectInputQualityAssessment;
   insights: ProjectInsights;
   score: ProjectScore;
   disciplines: ProjectDiscipline[];
@@ -51,7 +54,7 @@ export function analyzeProject(project: Project, generatedAt: string): ProjectAn
   const validation = validateProject(project);
   const diagnostics = buildDiagnostics(validation);
   const diagnosticsAggregation = buildDiagnosticsAggregation(diagnostics);
-  const inputQuality = buildMPPInputQuality(project, diagnostics);
+  const inputQuality = buildProjectInputQuality(project, diagnostics);
 
   if (inputQuality.level === "fatal") {
     throw new ProjectAnalysisFatalError(inputQuality.issues[0]?.message ?? inputQuality.summary);

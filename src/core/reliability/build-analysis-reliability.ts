@@ -1,7 +1,7 @@
 import type { GapVsCompensation } from "../compensation/build-gap-vs-compensation";
 import type { Diagnostics } from "../diagnostics/build-diagnostics";
 import type { DiagnosticsAggregation } from "../diagnostics/build-diagnostics-aggregation";
-import type { MPPInputQualityAssessment } from "../input-quality/build-mpp-input-quality";
+import type { ProjectInputQualityAssessment } from "../input-quality/build-project-input-quality";
 import type { ProjectInsights } from "../insights/build-project-insights";
 import type { Project } from "../model/project";
 import type { DisciplineProgressAnalysis } from "../progress/build-discipline-progress";
@@ -42,7 +42,7 @@ type AnalysisReliabilityInput = {
   disciplineProgress?: DisciplineProgressAnalysis;
   scheduleStatus?: ScheduleStatus;
   gapVsCompensation?: GapVsCompensation;
-  inputQuality?: MPPInputQualityAssessment;
+  inputQuality?: ProjectInputQualityAssessment;
 };
 
 const levelRank: Record<AnalysisReliabilityLevel, number> = {
