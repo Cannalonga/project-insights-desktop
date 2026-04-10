@@ -41,6 +41,7 @@ describe("licensing contract", () => {
         approved: false,
         reason: "license_already_bound",
         license_status: "active",
+        expires_at: "2027-04-05T00:00:00.000Z",
       },
     });
 

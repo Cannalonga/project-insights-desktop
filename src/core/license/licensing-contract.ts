@@ -55,7 +55,6 @@ export type ActivateLicenseDenied = {
   approved: false;
   reason: (typeof ACTIVATE_DENIED_REASONS)[number];
   licenseStatus: string;
-  expiresAt: string | null;
 };
 
 export type ActivateLicenseResponse = ActivateLicenseApproved | ActivateLicenseDenied;
@@ -172,7 +171,6 @@ export function parseActivateLicenseResponse(input: unknown): ActivateLicenseRes
       approved: false,
       reason: expectOneOf(reason, ACTIVATE_DENIED_REASONS, "activation denial reason"),
       licenseStatus,
-      expiresAt: getOptionalString(envelope.data, "expires_at"),
     };
   }
 
