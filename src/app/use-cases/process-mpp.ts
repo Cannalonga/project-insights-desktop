@@ -80,12 +80,12 @@ export class MPPInputFatalError extends Error {
 export type ProcessInput = {
   filePath?: string;
   xmlContent?: string;
+  model?: Project;
 };
 
 export function processMPP(input: ProcessInput): ProcessResult {
   const generatedAt = new Date().toISOString();
-  const raw = parseProject(input);
-  const model = mapRawProjectToModel(raw);
+  const model = input.model ?? mapRawProjectToModel(parseProject(input));
 
   const validation = validateProject(model);
   const diagnostics = buildDiagnostics(validation);

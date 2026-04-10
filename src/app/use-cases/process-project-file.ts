@@ -5,13 +5,15 @@ import {
   exportProcessingLogForUser,
   type ProcessingLogPayload,
 } from "./processing-log";
-import { convertMPPToXML, MPPConversionError } from "./convert-mpp-to-xml";
+import { convertMPPToXML } from "./convert-mpp-to-xml";
 import { processMPPWithHistory } from "./process-mpp-with-history";
 import type { ProcessInput, ProcessResult } from "./process-mpp";
 import { type InputFileValidationResult, validateInputFile } from "./validate-input-file";
+import { processProjectInput, type ProjectInputError } from "../../ingestion/shared/process-project-input";
 
 const MPP_FALLBACK_MESSAGE =
   "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.";
+const MPP_CONVERSION_FAILED_CODE = "MPP_CONVERSION_FAILED";
 
 export type ProcessingStage =
   | "validating_input"
@@ -85,6 +87,10 @@ export class ProjectFileGuidanceError extends Error {
   }
 }
 
+function buildProjectInputError(error: ProjectInputError): Error {
+  return new Error(error.message);
+}
+
 export async function processProjectFile(
   input: ProcessInput,
   convertMppToXml: (filePath: string) => Promise<string> = convertMPPToXML,
@@ -132,6 +138,14 @@ export async function processProjectFile(
 
       const xmlContent = input.xmlContent ?? (await readXmlFile(filePath));
       const readXmlMs = now() - readStartedAt;
+      const projectInput = await processProjectInput({
+        filePath,
+        xmlContent,
+      });
+
+      if (!projectInput.ok) {
+        throw buildProjectInputError(projectInput.error);
+      }
 
       currentStage = "generating_analysis";
       emitStage(options, currentStage);
@@ -139,6 +153,7 @@ export async function processProjectFile(
       const result = await processor({
         filePath,
         xmlContent,
+        model: projectInput.project,
       });
       const analysisMs = now() - analysisStartedAt;
       const totalMs = now() - startedAt;
@@ -165,12 +180,19 @@ export async function processProjectFile(
     currentStage = "converting_mpp";
     emitStage(options, currentStage);
     const conversionStartedAt = now();
-    let xmlContent: string;
+    let xmlContent = "";
+    const convertAndCaptureXml = async (inputPath: string): Promise<string> => {
+      xmlContent = await convertMppToXml(inputPath);
+      return xmlContent;
+    };
+    const projectInput = await processProjectInput({
+      filePath,
+      convertMPPToMSPDIXml: convertAndCaptureXml,
+    });
 
-    try {
-      xmlContent = await convertMppToXml(filePath);
-    } catch (error) {
+    if (!projectInput.ok) {
       const totalMs = now() - startedAt;
+      const error = buildProjectInputError(projectInput.error);
       await emitLog(options, {
         timestamp: new Date().toISOString(),
         level: "error",
@@ -184,7 +206,7 @@ export async function processProjectFile(
         ...getErrorDetails(error),
       });
 
-      if (error instanceof MPPConversionError) {
+      if (projectInput.error.code === MPP_CONVERSION_FAILED_CODE) {
         const userLogPath = await exportUserAccessibleLog(options);
         throw new ProjectFileGuidanceError(buildMppFallbackMessage(userLogPath));
       }
@@ -200,6 +222,7 @@ export async function processProjectFile(
     const result = await processor({
       filePath,
       xmlContent,
+      model: projectInput.project,
     });
 
     const analysisMs = now() - analysisStartedAt;

@@ -59,10 +59,13 @@ describe("processProjectFile", () => {
     expect(result).toEqual({ marker: "xml" });
     expect(validateFile).toHaveBeenCalledWith("D:\\Projeto.xml");
     expect(readXmlFile).toHaveBeenCalledWith("D:\\Projeto.xml");
-    expect(mockedProcessMPPWithHistory).toHaveBeenCalledWith({
+    expect(mockedProcessMPPWithHistory).toHaveBeenCalledWith(expect.objectContaining({
       filePath: "D:\\Projeto.xml",
+      model: expect.objectContaining({
+        name: "Projeto A",
+      }),
       xmlContent: validXml,
-    });
+    }));
     expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
       "validating_input",
       "reading_xml",
@@ -96,10 +99,13 @@ describe("processProjectFile", () => {
     expect(result).toEqual({ marker: "mpp" });
     expect(validateFile).toHaveBeenCalledWith("D:\\Projeto.mpp");
     expect(convertMppToXml).toHaveBeenCalledWith("D:\\Projeto.mpp");
-    expect(mockedProcessMPPWithHistory).toHaveBeenCalledWith({
+    expect(mockedProcessMPPWithHistory).toHaveBeenCalledWith(expect.objectContaining({
       filePath: "D:\\Projeto.mpp",
+      model: expect.objectContaining({
+        name: "Projeto A",
+      }),
       xmlContent: validXml,
-    });
+    }));
     expect(onStage.mock.calls.map(([stage]) => stage)).toEqual([
       "validating_input",
       "converting_mpp",
@@ -134,7 +140,7 @@ describe("processProjectFile", () => {
         { logEvent, exportUserLog },
       ),
     ).rejects.toThrow(
-      "Um log tecnico foi salvo em C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log.",
+      "Um log técnico foi salvo em C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log.",
     );
 
     expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();
@@ -164,7 +170,7 @@ describe("processProjectFile", () => {
         { exportUserLog },
       ),
     ).rejects.toThrow(
-      "Nao foi possivel processar este arquivo diretamente. Algumas versoes do MS Project podem gerar variacoes no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.",
+      "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.",
     );
 
     expect(exportUserLog).toHaveBeenCalledTimes(1);
