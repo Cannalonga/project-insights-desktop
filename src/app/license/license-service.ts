@@ -1,43 +1,40 @@
-import { loadLicense } from "./load-license";
-import {
-  buildInvalidState,
-  buildMissingState,
-  resolveLicenseState,
-} from "./resolve-license-state";
-import { saveLicense } from "./save-license";
-import { verifyLicense } from "./verify-license";
-import type { LicenseContextState } from "../../core/license/license-types";
+﻿import type { LicenseContextState } from "../../core/license/license-types";
+import { activateLicense, LicenseActivationError } from "./activate-license";
+import { clearInvalidLicenseState } from "./clear-invalid-license-state";
+import { loadStoredLicenseState } from "./load-stored-license-state";
+import { validateLicense } from "./validate-license";
 
 export type LicenseService = {
   loadCurrentState: () => Promise<LicenseContextState>;
-  importLicense: (contents: string) => Promise<LicenseContextState>;
+  activateLicense: (licenseKey: string) => Promise<LicenseContextState>;
+  validateCurrentState: () => Promise<LicenseContextState | null>;
+  clearInvalidLicenseState: () => Promise<void>;
 };
+
+export { LicenseActivationError };
 
 export function createLicenseService(): LicenseService {
   return {
     async loadCurrentState(): Promise<LicenseContextState> {
-      const stored = await loadLicense();
-
-      if (stored.status === "missing") {
-        return buildMissingState();
-      }
-
-      if (stored.status === "invalid") {
-        return buildInvalidState();
-      }
-
-      try {
-        const payload = await verifyLicense(stored.contents);
-        return resolveLicenseState(payload);
-      } catch {
-        return buildInvalidState();
-      }
+      const loaded = await loadStoredLicenseState();
+      return loaded.context;
     },
 
-    async importLicense(contents: string): Promise<LicenseContextState> {
-      const payload = await verifyLicense(contents);
-      await saveLicense(contents);
-      return resolveLicenseState(payload);
+    async activateLicense(licenseKey: string): Promise<LicenseContextState> {
+      return activateLicense(licenseKey);
+    },
+
+    async validateCurrentState(): Promise<LicenseContextState | null> {
+      const loaded = await loadStoredLicenseState();
+      if (!loaded.storedState) {
+        return null;
+      }
+
+      return validateLicense(loaded.storedState);
+    },
+
+    async clearInvalidLicenseState(): Promise<void> {
+      await clearInvalidLicenseState();
     },
   };
 }

@@ -6,6 +6,16 @@ type FeaturePolicyDecision = {
   description: string;
 };
 
+/**
+ * Demo Protection Checklist
+ * 1. Esse bloco permite inferir "o que fazer agora"? Se sim: BLOQUEAR ou REDUZIR.
+ * 2. Esse bloco, combinado com outros, permite decisão operacional? Se sim: REDUZIR.
+ * 3. Existe lista de tarefas, ações ou prioridades visíveis? Se sim: BLOQUEAR.
+ * 4. Existe valor numérico preciso que permita cálculo operacional? Se sim: REDUZIR.
+ * 5. A versão licenciada continua intacta? Deve ser SIM.
+ * 6. O core analítico foi alterado? Deve ser NÃO.
+ */
+
 function getFeatureLabel(feature: PremiumFeature): string {
   switch (feature) {
     case "export_csv":
@@ -22,6 +32,10 @@ function getFeatureLabel(feature: PremiumFeature): string {
       return "Visao executiva completa";
     case "recovery_full":
       return "Recuperacao completa";
+    case "comparison_task_lists":
+      return "Listas detalhadas da comparacao";
+    case "trend_curve_detail":
+      return "Curva S detalhada";
     default:
       return "Recurso premium";
   }

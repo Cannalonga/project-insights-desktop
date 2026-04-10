@@ -3,6 +3,8 @@ import type { AnalysisReliability } from "../../core/reliability/build-analysis-
 import type { SCurveResult } from "../../core/s-curve/build-s-curve";
 import type { ScheduleStatus } from "../../core/schedule/build-schedule-status";
 import type { ProjectScore } from "../../core/score/build-project-score";
+import type { LicenseContextState } from "../../core/license/license-types";
+import { LicenseGate } from "../license/LicenseGate";
 import type { PresentationMode } from "../types/presentation-mode";
 import type { DecisionActionWithNarrative } from "../decision/build-decision-narrative";
 import type { VersionComparisonSummary } from "../../app/comparison/compare-project-versions";
@@ -16,6 +18,9 @@ type OperationalPanelProps = {
   versionComparison?: VersionComparisonSummary | null;
   sCurve?: SCurveResult | null;
   decisionActions?: DecisionActionWithNarrative[];
+  license: LicenseContextState;
+  onRequestLicense: () => Promise<void>;
+  onOpenBuyLicense: () => Promise<void>;
 };
 
 function formatNumber(value: number, maximumFractionDigits = 2): string {
@@ -212,6 +217,30 @@ function getGapSupportText(
   return gapVsCompensation?.message ?? "Sem base histórica suficiente";
 }
 
+function getDemoGapLabel(
+  gapVsCompensation?: GapVsCompensation | null,
+  versionComparison?: VersionComparisonSummary | null,
+): string {
+  if (versionComparison) {
+    return "Comparação resumida";
+  }
+
+  if (!gapVsCompensation) {
+    return "Leitura agregada";
+  }
+
+  switch (gapVsCompensation.status) {
+    case "recoverable":
+      return "Recuperação possível";
+    case "tight":
+      return "Recuperação no limite";
+    case "insufficient":
+      return "Recuperação insuficiente";
+    default:
+      return "Leitura agregada";
+  }
+}
+
 function getGapReading(scheduleStatus?: ScheduleStatus | null): string {
   const gap = scheduleStatus?.gap ?? 0;
 
@@ -226,7 +255,11 @@ function getGapReading(scheduleStatus?: ScheduleStatus | null): string {
   return "Sem desvio percentual relevante no ponto atual.";
 }
 
-function renderReliabilityCompact(analysisReliability: AnalysisReliability, presentationMode: PresentationMode) {
+function renderReliabilityCompact(
+  analysisReliability: AnalysisReliability,
+  presentationMode: PresentationMode,
+  isLicensed: boolean,
+) {
   const isExecutiveMode = presentationMode === "executive";
 
   return (
@@ -243,28 +276,36 @@ function renderReliabilityCompact(analysisReliability: AnalysisReliability, pres
         </span>
       </div>
 
-      <div className="compact-breakdown">
-        <span className={`reliability-pill ${getPillClass(analysisReliability.progressReliability)}`}>
-          Progresso{" "}
-          {isExecutiveMode
-            ? describeReliability(analysisReliability.progressReliability).toLowerCase()
-            : compactReliability(analysisReliability.progressReliability)}
-        </span>
-        <span className={`reliability-pill ${getPillClass(analysisReliability.scheduleReliability)}`}>
-          Prazo{" "}
-          {isExecutiveMode
-            ? describeReliability(analysisReliability.scheduleReliability).toLowerCase()
-            : compactReliability(analysisReliability.scheduleReliability)}
-        </span>
-        <span className={`reliability-pill ${getPillClass(analysisReliability.dataQualityReliability)}`}>
-          Dados{" "}
-          {isExecutiveMode
-            ? describeReliability(analysisReliability.dataQualityReliability).toLowerCase()
-            : compactReliability(analysisReliability.dataQualityReliability)}
-        </span>
-      </div>
+      {isLicensed ? (
+        <div className="compact-breakdown">
+          <span className={`reliability-pill ${getPillClass(analysisReliability.progressReliability)}`}>
+            Progresso{" "}
+            {isExecutiveMode
+              ? describeReliability(analysisReliability.progressReliability).toLowerCase()
+              : compactReliability(analysisReliability.progressReliability)}
+          </span>
+          <span className={`reliability-pill ${getPillClass(analysisReliability.scheduleReliability)}`}>
+            Prazo{" "}
+            {isExecutiveMode
+              ? describeReliability(analysisReliability.scheduleReliability).toLowerCase()
+              : compactReliability(analysisReliability.scheduleReliability)}
+          </span>
+          <span className={`reliability-pill ${getPillClass(analysisReliability.dataQualityReliability)}`}>
+            Dados{" "}
+            {isExecutiveMode
+              ? describeReliability(analysisReliability.dataQualityReliability).toLowerCase()
+              : compactReliability(analysisReliability.dataQualityReliability)}
+          </span>
+        </div>
+      ) : (
+        <p className="panel-description" style={{ marginTop: 12 }}>
+          A demo mostra o nível geral de confiança. Ative a licença para ver a decomposição por progresso, prazo e dados.
+        </p>
+      )}
 
-      {isExecutiveMode ? <p className="panel-description" style={{ marginTop: 12 }}>{buildReliabilityExecutiveNote(analysisReliability)}</p> : null}
+      {isExecutiveMode && isLicensed ? (
+        <p className="panel-description" style={{ marginTop: 12 }}>{buildReliabilityExecutiveNote(analysisReliability)}</p>
+      ) : null}
     </section>
   );
 }
@@ -284,11 +325,11 @@ function buildExecutiveCurveReading(scheduleStatus: ScheduleStatus | null | unde
     toCurvePercent(previousPoint.plannedAccumulated, sCurve.percentBaseValue);
 
   if (currentGap < previousGap - 1) {
-    return "TendÃªncia de desvio crescente na Curva S.";
+    return "Tend\u00eancia de desvio crescente na Curva S.";
   }
 
   if (currentGap > previousGap + 1) {
-    return "RecuperaÃ§Ã£o recente detectada na Curva S.";
+    return "Recupera\u00e7\u00e3o recente detectada na Curva S.";
   }
 
   if (currentGap < 0) {
@@ -307,6 +348,9 @@ export function OperationalPanel({
   versionComparison,
   sCurve,
   decisionActions = [],
+  license,
+  onRequestLicense,
+  onOpenBuyLicense,
 }: OperationalPanelProps) {
   if (!score && !analysisReliability && !scheduleStatus && !gapVsCompensation && !versionComparison && (!sCurve || sCurve.points.length === 0)) {
     return null;
@@ -317,6 +361,7 @@ export function OperationalPanel({
     curveGap < 0 ? `Abaixo do esperado em ${formatPercent(Math.abs(curveGap))}.` : curveGap > 0 ? `Acima do esperado em ${formatPercent(curveGap)}.` : "Sem desvio relevante.";
   const primaryDecision = decisionActions[0];
   const curveChartWidth = sCurve ? getCurveChartWidth(sCurve.points.length) : 820;
+  const isLicensed = license.isLicensed;
 
   return (
     <section className="dashboard-grid">
@@ -333,7 +378,11 @@ export function OperationalPanel({
           <span className="metric-label">Score do projeto</span>
           <strong>{score ? formatNumber(score.value, 0) : "n/a"}</strong>
           <span className="muted-text">
-            {presentationMode === "executive" ? "Sa\u00fade do cronograma" : "Sa\u00fade consolidada do cronograma"}
+            {presentationMode === "executive"
+              ? "Sa\u00fade do cronograma"
+              : isLicensed
+                ? "Sa\u00fade consolidada do cronograma"
+                : "Leitura agregada da sa\u00fade do cronograma"}
           </span>
         </article>
 
@@ -351,157 +400,197 @@ export function OperationalPanel({
 
         <article className="panel-card executive-card">
           <span className="metric-label">{getGapCardTitle(versionComparison)}</span>
-          <strong>{getGapCompensationLabel(gapVsCompensation, versionComparison)}</strong>
+          <strong>
+            {isLicensed
+              ? getGapCompensationLabel(gapVsCompensation, versionComparison)
+              : getDemoGapLabel(gapVsCompensation, versionComparison)}
+          </strong>
           <span className="muted-text">
             {presentationMode === "executive" && primaryDecision && !versionComparison
-              ? `Ação líder ${primaryDecision.title} | ganho potencial ${formatPercent(primaryDecision.gainPercent)}`
-              : getGapSupportText(gapVsCompensation, versionComparison)}
+              ? isLicensed
+                ? `Ação líder ${primaryDecision.title} | ganho potencial ${formatPercent(primaryDecision.gainPercent)}`
+                : "Há leitura executiva disponível; ative para ver o direcionamento completo."
+              : isLicensed
+                ? getGapSupportText(gapVsCompensation, versionComparison)
+                : "A demo mostra o gap agregado. Ative para ver a decomposição operacional."}
           </span>
         </article>
       </section>
 
-      {analysisReliability ? renderReliabilityCompact(analysisReliability, presentationMode) : null}
+      {analysisReliability ? renderReliabilityCompact(analysisReliability, presentationMode, isLicensed) : null}
 
       {sCurve && sCurve.points.length > 0 ? (
-        <section className="panel-card chart-card s-curve-primary-card">
-          <div className="panel-header">
-            <div>
-              <p className="panel-kicker">Curva S</p>
-              <h2 className="panel-title">Planejado x Executado x Real</h2>
+        <LicenseGate
+          feature="trend_curve_detail"
+          license={license}
+          onRequestLicense={onRequestLicense}
+          onOpenBuyLicense={onOpenBuyLicense}
+          fallback={
+            <section className="panel-card chart-card s-curve-primary-card">
+              <div className="panel-header">
+                <div>
+                  <p className="panel-kicker">Curva S</p>
+                  <h2 className="panel-title">Tendência de avanço</h2>
+                </div>
+              </div>
+              <div className="decision-grid compact-grid">
+                <article className="metric-card">
+                  <span className="metric-label">Desvio atual</span>
+                  <strong>{formatPercent(Math.abs(curveGap))}</strong>
+                </article>
+                <article className="metric-card">
+                  <span className="metric-label">Pontos analisados</span>
+                  <strong>{sCurve.points.length}</strong>
+                </article>
+              </div>
+              <p className="panel-description" style={{ marginTop: 16 }}>
+                {presentationMode === "executive"
+                  ? buildExecutiveCurveReading(scheduleStatus, sCurve)
+                  : "A demo mostra a tendência geral da Curva S. Ative a licença para visualizar a leitura completa do traçado."}
+              </p>
+            </section>
+          }
+        >
+          <section className="panel-card chart-card s-curve-primary-card">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Curva S</p>
+                <h2 className="panel-title">Planejado x Executado x Real</h2>
+              </div>
+              <div className="curve-reading-badges">
+                <span className={`status-pill ${curveGap < 0 ? "pill-critical" : curveGap > 0 ? "pill-ok" : "pill-attention"}`}>
+                  Desvio atual {formatPercent(Math.abs(curveGap))}
+                </span>
+                <span className="muted-text">
+                  {presentationMode === "executive" ? buildExecutiveCurveReading(scheduleStatus, sCurve) : getGapReading(scheduleStatus)}
+                </span>
+              </div>
             </div>
-            <div className="curve-reading-badges">
-              <span className={`status-pill ${curveGap < 0 ? "pill-critical" : curveGap > 0 ? "pill-ok" : "pill-attention"}`}>
-                Desvio atual {formatPercent(Math.abs(curveGap))}
-              </span>
-              <span className="muted-text">
-                {presentationMode === "executive" ? buildExecutiveCurveReading(scheduleStatus, sCurve) : getGapReading(scheduleStatus)}
-              </span>
-            </div>
-          </div>
 
-          <div className="chart-scroll">
-            <div className="chart-scroll-inner" style={{ minWidth: `${curveChartWidth}px` }}>
-              <svg
-                width={curveChartWidth}
-                height="320"
-                viewBox={`0 0 ${curveChartWidth} 320`}
-                role="img"
-                aria-label="Curva S acumulada"
-              >
-                <line x1="56" y1="20" x2="56" y2="230" stroke="#94a3b8" strokeWidth="1" />
-                <line x1="56" y1="230" x2={curveChartWidth - 24} y2="230" stroke="#94a3b8" strokeWidth="1" />
-                {[0, 25, 50, 75, 100].map((value) => {
-                  const y = 230 - (value / 100) * 210;
-                  return (
-                    <g key={value}>
-                      <line x1="56" y1={y} x2={curveChartWidth - 24} y2={y} stroke="#e2e8f0" strokeWidth="1" />
-                      <text x="10" y={y + 4} fontSize="12" fill="#475569">
-                        {value}%
-                      </text>
-                    </g>
-                  );
-                })}
-                <path
-                  d={buildCurvePath(
-                    sCurve.points.map((point) => toCurvePercent(point.plannedAccumulated, sCurve.percentBaseValue)),
-                    curveChartWidth,
-                    270,
-                    56,
-                  )}
-                  fill="none"
-                  stroke="#2563eb"
-                  strokeWidth="3.5"
-                />
-                <path
-                  d={buildCurvePath(
-                    sCurve.points.map((point) => toCurvePercent(point.replannedAccumulated, sCurve.percentBaseValue)),
-                    curveChartWidth,
-                    270,
-                    56,
-                  )}
-                  fill="none"
-                  stroke="#f97316"
-                  strokeWidth="3.5"
-                />
-                <path
-                  d={buildCurvePath(
-                    sCurve.points.map((point) => toCurvePercent(point.realAccumulated, sCurve.percentBaseValue)),
-                    curveChartWidth,
-                    270,
-                    56,
-                  )}
-                  fill="none"
-                  stroke="#dc2626"
-                  strokeWidth="4"
-                />
-                {[
-                  {
-                    key: "planned",
-                    color: "#2563eb",
-                    label: "Planejado acumulado",
-                    values: sCurve.points.map((point) => toCurvePercent(point.plannedAccumulated, sCurve.percentBaseValue)),
-                  },
-                  {
-                    key: "replanned",
-                    color: "#f97316",
-                    label: "Replanejado acumulado",
-                    values: sCurve.points.map((point) => toCurvePercent(point.replannedAccumulated, sCurve.percentBaseValue)),
-                  },
-                  {
-                    key: "real",
-                    color: "#dc2626",
-                    label: "Real acumulado",
-                    values: sCurve.points.map((point) => toCurvePercent(point.realAccumulated, sCurve.percentBaseValue)),
-                  },
-                ].flatMap((series) =>
-                  sCurve.points.map((point, index) => {
-                    const coordinate = getCurveCoordinate(
-                      series.values[index],
-                      index,
-                      sCurve.points.length,
+            <div className="chart-scroll">
+              <div className="chart-scroll-inner" style={{ minWidth: `${curveChartWidth}px` }}>
+                <svg
+                  width={curveChartWidth}
+                  height="320"
+                  viewBox={`0 0 ${curveChartWidth} 320`}
+                  role="img"
+                  aria-label="Curva S acumulada"
+                >
+                  <line x1="56" y1="20" x2="56" y2="230" stroke="#94a3b8" strokeWidth="1" />
+                  <line x1="56" y1="230" x2={curveChartWidth - 24} y2="230" stroke="#94a3b8" strokeWidth="1" />
+                  {[0, 25, 50, 75, 100].map((value) => {
+                    const y = 230 - (value / 100) * 210;
+                    return (
+                      <g key={value}>
+                        <line x1="56" y1={y} x2={curveChartWidth - 24} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+                        <text x="10" y={y + 4} fontSize="12" fill="#475569">
+                          {value}%
+                        </text>
+                      </g>
+                    );
+                  })}
+                  <path
+                    d={buildCurvePath(
+                      sCurve.points.map((point) => toCurvePercent(point.plannedAccumulated, sCurve.percentBaseValue)),
                       curveChartWidth,
                       270,
                       56,
-                    );
+                    )}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth="3.5"
+                  />
+                  <path
+                    d={buildCurvePath(
+                      sCurve.points.map((point) => toCurvePercent(point.replannedAccumulated, sCurve.percentBaseValue)),
+                      curveChartWidth,
+                      270,
+                      56,
+                    )}
+                    fill="none"
+                    stroke="#f97316"
+                    strokeWidth="3.5"
+                  />
+                  <path
+                    d={buildCurvePath(
+                      sCurve.points.map((point) => toCurvePercent(point.realAccumulated, sCurve.percentBaseValue)),
+                      curveChartWidth,
+                      270,
+                      56,
+                    )}
+                    fill="none"
+                    stroke="#dc2626"
+                    strokeWidth="4"
+                  />
+                  {[
+                    {
+                      key: "planned",
+                      color: "#2563eb",
+                      label: "Planejado acumulado",
+                      values: sCurve.points.map((point) => toCurvePercent(point.plannedAccumulated, sCurve.percentBaseValue)),
+                    },
+                    {
+                      key: "replanned",
+                      color: "#f97316",
+                      label: "Replanejado acumulado",
+                      values: sCurve.points.map((point) => toCurvePercent(point.replannedAccumulated, sCurve.percentBaseValue)),
+                    },
+                    {
+                      key: "real",
+                      color: "#dc2626",
+                      label: "Real acumulado",
+                      values: sCurve.points.map((point) => toCurvePercent(point.realAccumulated, sCurve.percentBaseValue)),
+                    },
+                  ].flatMap((series) =>
+                    sCurve.points.map((point, index) => {
+                      const coordinate = getCurveCoordinate(
+                        series.values[index],
+                        index,
+                        sCurve.points.length,
+                        curveChartWidth,
+                        270,
+                        56,
+                      );
+
+                      return (
+                        <circle key={`${series.key}-${point.date}`} cx={coordinate.x} cy={coordinate.y} r="3" fill={series.color}>
+                          <title>{`${series.label}: ${formatDisplayDate(point.date)} - ${formatPercent(series.values[index])}`}</title>
+                        </circle>
+                      );
+                    }),
+                  )}
+                  {sCurve.points.map((point, index) => {
+                    if (!shouldRenderCurveLabel(sCurve.points, index)) {
+                      return null;
+                    }
+
+                    const { x } = getCurveCoordinate(0, index, sCurve.points.length, curveChartWidth, 270, 56);
 
                     return (
-                      <circle key={`${series.key}-${point.date}`} cx={coordinate.x} cy={coordinate.y} r="3" fill={series.color}>
-                        <title>{`${series.label}: ${formatDisplayDate(point.date)} - ${formatPercent(series.values[index])}`}</title>
-                      </circle>
+                      <text
+                        key={point.date}
+                        x={x}
+                        y="260"
+                        fontSize="11"
+                        fill="#475569"
+                        textAnchor={index === 0 ? "start" : index === sCurve.points.length - 1 ? "end" : "middle"}
+                        transform={`rotate(-35 ${x} 260)`}
+                      >
+                        {formatAxisDate(point.date)}
+                      </text>
                     );
-                  }),
-                )}
-                {sCurve.points.map((point, index) => {
-                  if (!shouldRenderCurveLabel(sCurve.points, index)) {
-                    return null;
-                  }
-
-                  const { x } = getCurveCoordinate(0, index, sCurve.points.length, curveChartWidth, 270, 56);
-
-                  return (
-                    <text
-                      key={point.date}
-                      x={x}
-                      y="260"
-                      fontSize="11"
-                      fill="#475569"
-                      textAnchor={index === 0 ? "start" : index === sCurve.points.length - 1 ? "end" : "middle"}
-                      transform={`rotate(-35 ${x} 260)`}
-                    >
-                      {formatAxisDate(point.date)}
-                    </text>
-                  );
-                })}
-              </svg>
+                  })}
+                </svg>
+              </div>
             </div>
-          </div>
 
-          <div className="chart-legend minimal">
-            <span><span className="legend-line" style={{ background: "#2563eb" }} /> Planejado</span>
-            <span><span className="legend-line" style={{ background: "#f97316" }} /> Executado</span>
-            <span><span className="legend-line" style={{ background: "#dc2626" }} /> Real</span>
-          </div>
-        </section>
+            <div className="chart-legend minimal">
+              <span><span className="legend-line" style={{ background: "#2563eb" }} /> Planejado</span>
+              <span><span className="legend-line" style={{ background: "#f97316" }} /> Executado</span>
+              <span><span className="legend-line" style={{ background: "#dc2626" }} /> Real</span>
+            </div>
+          </section>
+        </LicenseGate>
       ) : null}
     </section>
   );

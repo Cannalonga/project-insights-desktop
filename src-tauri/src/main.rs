@@ -1,8 +1,9 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod logger;
 mod license_public_key;
 mod license_storage;
+mod licensing_runtime;
 mod mpp_conversion;
 mod pdf_export;
 
@@ -16,6 +17,10 @@ fn main() {
             license_storage::load_license_content,
             license_storage::save_license_content,
             license_storage::verify_license_signature,
+            licensing_runtime::load_licensing_state,
+            licensing_runtime::save_licensing_state,
+            licensing_runtime::clear_licensing_state,
+            licensing_runtime::get_machine_fingerprint,
             mpp_conversion::convert_mpp_to_mspdi,
             pdf_export::export_executive_pdf
         ])

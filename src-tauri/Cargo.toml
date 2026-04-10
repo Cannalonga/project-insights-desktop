@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "1.8", features = [ "dialog-save", "dialog-open", "fs-read-file", "fs-read-dir", "fs-write-file", "fs-create-dir", "fs-exists", "shell-open"] }
 quick-xml = "0.38"
+sha2 = "0.10"
 
 [features]
 default = ["custom-protocol"]

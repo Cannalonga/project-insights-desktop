@@ -7,14 +7,17 @@ describe("license feature policy", () => {
     expect(
       getLicenseFeatureDecision(
         {
-          status: "valid",
+          status: "VALID",
           isLicensed: true,
-          message: "Licenca ativa.",
+          source: "remote",
+          message: "Licença ativa.",
         },
-        "export_power_bi_package",
+        "export_csv",
       ),
-    ).toMatchObject({
+    ).toEqual({
       allowed: true,
+      title: "",
+      description: "",
     });
   });
 
@@ -22,15 +25,35 @@ describe("license feature policy", () => {
     expect(
       getLicenseFeatureDecision(
         {
-          status: "missing",
+          status: "NO_LICENSE",
           isLicensed: false,
-          message: "Modo demonstracao ativo.",
+          source: "local",
+          message: "Modo demonstração.",
         },
-        "export_power_bi_package",
+        "export_csv",
       ),
-    ).toMatchObject({
+    ).toEqual({
       allowed: false,
-      title: "Pacote Power BI disponivel na versao completa",
+      title: "Exportacao CSV completa disponivel na versao completa",
+      description: "Insira uma licenca valida ou obtenha a versao completa para liberar este recurso.",
+    });
+  });
+
+  it("exposes specific labels for presentation-gated demo blocks", () => {
+    expect(
+      getLicenseFeatureDecision(
+        {
+          status: "NO_LICENSE",
+          isLicensed: false,
+          source: "local",
+          message: "Modo demonstração.",
+        },
+        "trend_curve_detail",
+      ),
+    ).toEqual({
+      allowed: false,
+      title: "Curva S detalhada disponivel na versao completa",
+      description: "Insira uma licenca valida ou obtenha a versao completa para liberar este recurso.",
     });
   });
 });

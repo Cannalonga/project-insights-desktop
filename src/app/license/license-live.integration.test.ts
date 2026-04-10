@@ -1,4 +1,4 @@
-﻿// @vitest-environment node
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLicenseService } from "./license-service";
@@ -17,6 +17,7 @@ const liveEnabled = process.env.LIVE_LICENSE_TESTS === "1";
 const liveSupabaseUrl = process.env.LIVE_LICENSING_SUPABASE_URL ?? "";
 const liveAnonKey = process.env.LIVE_LICENSING_ANON_KEY ?? "";
 const liveAdminToken = process.env.LIVE_LICENSING_ADMIN_TOKEN ?? "";
+const liveProjectRef = process.env.LIVE_LICENSING_PROJECT_REF ?? "uziellpqviqtyquyaomr";
 
 function buildHeaders(admin = false): HeadersInit {
   const headers: Record<string, string> = {
@@ -71,7 +72,7 @@ describe.runIf(liveEnabled)("license service live integration", () => {
 
     env.VITE_LICENSING_SUPABASE_URL = liveSupabaseUrl;
     env.VITE_LICENSING_ANON_KEY = liveAnonKey;
-    env.VITE_LICENSING_PROJECT_REF = "uziellpqviqtyquyaomr";
+    env.VITE_LICENSING_PROJECT_REF = liveProjectRef;
     env.VITE_LICENSING_TIMEOUT_MS = "8000";
   });
 
@@ -89,7 +90,7 @@ describe.runIf(liveEnabled)("license service live integration", () => {
     const service = createLicenseService();
     const state = await service.activateLicense(issue.data.license_key);
 
-    expect(state).toMatchObject({ status: "valid", isLicensed: true });
+    expect(state).toMatchObject({ status: "VALID", isLicensed: true });
     expect(storedState).toContain(issue.data.license_key);
   }, 20000);
 
@@ -105,17 +106,17 @@ describe.runIf(liveEnabled)("license service live integration", () => {
 
     service = createLicenseService();
     const offlineState = await service.loadCurrentState();
-    expect(offlineState).toMatchObject({ status: "offline_valid", isLicensed: true });
+    expect(offlineState).toMatchObject({ status: "OFFLINE_VALID", isLicensed: true });
 
     const validatedState = await service.validateCurrentState();
-    expect(validatedState).toMatchObject({ status: "valid", isLicensed: true });
+    expect(validatedState).toMatchObject({ status: "VALID", isLicensed: true });
   }, 20000);
 
   it("does not persist valid state for an invalid license", async () => {
     const service = createLicenseService();
     const state = await service.activateLicense("PI-XXXXX-XXXXX-XXXXX-XXXXX");
 
-    expect(state).toMatchObject({ status: "invalid_license", isLicensed: false });
+    expect(state).toMatchObject({ status: "INVALID", isLicensed: false });
     expect(storedState).toBeNull();
   }, 20000);
 
@@ -135,7 +136,7 @@ describe.runIf(liveEnabled)("license service live integration", () => {
     );
 
     const validatedState = await service.validateCurrentState();
-    expect(validatedState).toMatchObject({ status: "revoked", isLicensed: false });
+    expect(validatedState).toMatchObject({ status: "REVOKED", isLicensed: false });
     expect(storedState).toBeNull();
   }, 20000);
 
@@ -168,7 +169,7 @@ describe.runIf(liveEnabled)("license service live integration", () => {
     );
 
     const validatedState = await service.validateCurrentState();
-    expect(["mismatch", "invalid_license"]).toContain(validatedState?.status);
+    expect(["MISMATCH", "INVALID"]).toContain(validatedState?.status);
     expect(storedState).toBeNull();
   }, 20000);
 
@@ -186,6 +187,6 @@ describe.runIf(liveEnabled)("license service live integration", () => {
     const validatedState = await service.validateCurrentState();
     fetchSpy.mockRestore();
 
-    expect(validatedState).toMatchObject({ status: "offline_valid", isLicensed: true });
+    expect(validatedState).toMatchObject({ status: "OFFLINE_VALID", isLicensed: true });
   }, 20000);
 });

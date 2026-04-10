@@ -199,8 +199,20 @@ export function App() {
           versionComparison={effectiveAnalysisMode === "comparison" ? result?.versionComparison ?? null : null}
           sCurve={result?.sCurve ?? null}
           decisionActions={decisionActions}
+          license={license}
+          onRequestLicense={async () => {
+            window.dispatchEvent(new CustomEvent("project-insights:open-license-panel"));
+          }}
+          onOpenBuyLicense={openBuyLicense}
         />
-        <ComparisonPanel comparison={effectiveAnalysisMode === "comparison" ? result?.versionComparison ?? null : null} />
+        <ComparisonPanel
+          comparison={effectiveAnalysisMode === "comparison" ? result?.versionComparison ?? null : null}
+          license={license}
+          onRequestLicense={async () => {
+            window.dispatchEvent(new CustomEvent("project-insights:open-license-panel"));
+          }}
+          onOpenBuyLicense={openBuyLicense}
+        />
         <InsightsPanel
           presentationMode={presentationMode}
           project={result?.model ?? null}

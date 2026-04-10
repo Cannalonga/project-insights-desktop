@@ -311,6 +311,23 @@ function buildDisciplineSummary(group: TaskPresentationGroup): string {
   return `${group.predominantDisciplineName ?? group.disciplineNames[0]} +${group.disciplineNames.length - 1}`;
 }
 
+function getDemoRecoveryLabel(
+  rank: 3 | 5,
+  compensationAnalysis: OperationalCompensationAnalysis,
+): string {
+  const impact = rank === 3 ? compensationAnalysis.potential.top3ImpactPercent : compensationAnalysis.potential.top5ImpactPercent;
+
+  if (impact >= 5) {
+    return "Potencial relevante";
+  }
+
+  if (impact >= 2) {
+    return "Potencial moderado";
+  }
+
+  return "Potencial limitado";
+}
+
 function buildDecisionTaskScheduleContext(task: DecisionActionTask): string[] {
   const items: string[] = [];
   const plannedStart = task.plannedStart ? formatDate(task.plannedStart) : null;
@@ -451,6 +468,7 @@ export function InsightsPanel({
   onOpenBuyLicense,
 }: InsightsPanelProps) {
   const isExecutiveMode = presentationMode === "executive";
+  const isLicensed = license.isLicensed;
   const tasksById = new Map((project?.tasks ?? []).map((task) => [task.id, task]));
   const disciplinesByName = new Map(disciplines.map((discipline) => [discipline.name, discipline]));
   const disciplineWeightsByName = new Map((weightModel?.disciplineWeights ?? []).map((discipline) => [discipline.name, discipline]));
@@ -466,6 +484,12 @@ export function InsightsPanel({
   const topAlerts = executiveAlerts.slice(0, isExecutiveMode ? 3 : 5);
   const executiveActions = isExecutiveMode ? decisionActions.slice(0, 3) : [];
   const primaryExecutiveAction = executiveActions[0];
+  const hasActionContent = Boolean(primaryExecutiveAction) || presentationGroups.length > 0;
+  const alertSummary = {
+    critical: topAlerts.filter((alert) => alert.severity === "critical").length,
+    warning: topAlerts.filter((alert) => alert.severity === "warning").length,
+    info: topAlerts.filter((alert) => alert.severity === "info").length,
+  };
 
   if (presentationGroups.length === 0 && executiveActions.length === 0 && topAlerts.length === 0 && !compensationAnalysis) {
     return null;
@@ -473,7 +497,36 @@ export function InsightsPanel({
 
   return (
     <section className="dashboard-grid">
-        {isExecutiveMode && primaryExecutiveAction ? (
+        {!isLicensed && hasActionContent ? (
+          <section className="panel-card action-panel">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">{isExecutiveMode ? "Visao executiva" : "Prioridades identificadas"}</p>
+                <h2 className="panel-title">{isExecutiveMode ? "Leitura premium bloqueada" : "Ações protegidas na demo"}</h2>
+              </div>
+            </div>
+            <p className="panel-description">
+              {isExecutiveMode
+                ? "A demonstração mostra o status geral do projeto, mas a leitura executiva completa fica disponível apenas na versão licenciada."
+                : "A demo confirma que existem ações prioritárias identificadas, mas os detalhes acionáveis ficam disponíveis apenas na versão licenciada."}
+            </p>
+            <div className="priority-stats">
+              <span className="comparison-chip">
+                <strong>{isExecutiveMode ? "Ações destacadas" : "Frentes priorizadas"}</strong> {isExecutiveMode ? 3 : presentationGroups.length}
+              </span>
+              {topAlerts.length > 0 ? (
+                <span className="comparison-chip">
+                  <strong>Sinais detectados</strong> {topAlerts.length}
+                </span>
+              ) : null}
+              {recommendedAction ? (
+                <span className="comparison-chip">
+                  <strong>Impacto agregado</strong> {formatPercent(recommendedAction.impactPercentTotal)}
+                </span>
+              ) : null}
+            </div>
+          </section>
+        ) : isExecutiveMode && primaryExecutiveAction ? (
           <LicenseGate
             feature="executive_full_view"
             license={license}
@@ -870,16 +923,22 @@ export function InsightsPanel({
           <div className="decision-grid compact-grid">
             <article className="metric-card">
               <span className="metric-label">Impacto potencial de compensação das 3 principais tasks</span>
-              <strong>{formatPercent(compensationAnalysis.potential.top3ImpactPercent)}</strong>
+              <strong>
+                {isLicensed ? formatPercent(compensationAnalysis.potential.top3ImpactPercent) : getDemoRecoveryLabel(3, compensationAnalysis)}
+              </strong>
             </article>
             <article className="metric-card">
               <span className="metric-label">Impacto potencial de compensação das 5 principais tasks</span>
-              <strong>{formatPercent(compensationAnalysis.potential.top5ImpactPercent)}</strong>
+              <strong>
+                {isLicensed ? formatPercent(compensationAnalysis.potential.top5ImpactPercent) : getDemoRecoveryLabel(5, compensationAnalysis)}
+              </strong>
             </article>
           </div>
 
             <p className="panel-description" style={{ marginTop: 16 }}>
-              {compensationAnalysis.potential.message}
+              {isLicensed
+                ? compensationAnalysis.potential.message
+                : "A demo mostra o potencial agregado de compensação. Ative a licença para visualizar os vetores operacionais completos."}
             </p>
 
             <LicenseGate
@@ -1037,14 +1096,37 @@ export function InsightsPanel({
             </div>
           </div>
 
-          <ul className="clean-list">
-            {topAlerts.map((alert) => (
-              <li key={alert.id}>
-                <span className={`alert-pill ${getAlertClass(alert.severity)}`}>{alert.severity.toUpperCase()}</span>{" "}
-                <strong>{alert.message}</strong>
-              </li>
-            ))}
-          </ul>
+          {isLicensed ? (
+            <ul className="clean-list">
+              {topAlerts.map((alert) => (
+                <li key={alert.id}>
+                  <span className={`alert-pill ${getAlertClass(alert.severity)}`}>{alert.severity.toUpperCase()}</span>{" "}
+                  <strong>{alert.message}</strong>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              <div className="metrics-grid export-summary-grid">
+                <div className="metric-card">
+                  <span className="metric-label">Críticos</span>
+                  <strong>{alertSummary.critical}</strong>
+                </div>
+                <div className="metric-card">
+                  <span className="metric-label">Atenção</span>
+                  <strong>{alertSummary.warning}</strong>
+                </div>
+                <div className="metric-card">
+                  <span className="metric-label">Informativos</span>
+                  <strong>{alertSummary.info}</strong>
+                </div>
+              </div>
+              <p className="panel-description" style={{ marginTop: 16 }}>
+                A demo mostra a presença de sinais prioritários, mas os alertas detalhados ficam disponíveis apenas na
+                versão licenciada.
+              </p>
+            </>
+          )}
         </section>
       ) : null}
     </section>

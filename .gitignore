@@ -1,8 +1,11 @@
 node_modules/
 dist/
+.env
+.env.*
 tauri-dev.out.log
 tauri-dev.err.log
 src-tauri/target/
+tools/license-admin-ui/src-tauri/target/
 src-tauri/resources/mpp-converter/runtime/
 data/*
 !data/example/
@@ -11,3 +14,4 @@ exports/
 logs/
 *.csv
 manifest.json
+dist-external-test-*/
