@@ -7,6 +7,7 @@ import { exportExecutivePdf } from "../../app/use-cases/export-executive-pdf";
 import type { LicenseContextState } from "../../core/license/license-types";
 import { buildPowerBIPackage } from "../../core/export/export-power-bi-package";
 import { LicenseGate } from "../license/LicenseGate";
+import { prepareTextExportContent } from "../export/prepare-text-export";
 import type { PresentationMode } from "../types/presentation-mode";
 import type { ProcessResult } from "../types/process-result";
 
@@ -46,7 +47,7 @@ export function ResultPanel({
         return;
       }
 
-      await writeTextFile(filePath, content);
+      await writeTextFile(filePath, prepareTextExportContent(content, extension));
       setExportMessage(`${name} salvo em ${filePath}`);
     } catch (err) {
       setExportMessage(err instanceof Error ? err.message : `Nao foi possivel salvar ${name.toLowerCase()}.`);
@@ -107,7 +108,7 @@ export function ResultPanel({
       });
 
       for (const file of powerBIPackage.files) {
-        await writeTextFile(`${directoryPath}\${file.fileName}`, file.content);
+        await writeTextFile(`${directoryPath}\${file.fileName}`, prepareTextExportContent(file.content, file.fileName));
       }
 
       setExportMessage(`Pacote Power BI salvo em ${directoryPath}`);
