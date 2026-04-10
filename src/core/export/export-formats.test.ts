@@ -406,6 +406,165 @@ describe("export formats", () => {
     expect(csv).toContain('"insight","Projeto Teste","2026-03-26T10:00:00.000Z"');
   });
 
+  it("preserves UTF-8 accentuation across JSON, XML and CSV exports", () => {
+    const accentedProject: Project = {
+      ...project,
+      name: "Projeto Validação",
+      tasks: [
+        {
+          ...project.tasks[0],
+          name: "Escavação",
+        },
+      ],
+      resources: [{ id: "r1", name: "Equipe Mecânica", type: "work" }],
+    };
+    const accentedDiagnostics: Diagnostics = {
+      ...diagnostics,
+      items: [
+        {
+          ...diagnostics.items[0],
+          message: "Mecânica exige ação de validação.",
+          taskName: "Escavação",
+        },
+      ],
+      warnings: [
+        {
+          ...diagnostics.warnings[0],
+          message: "Mecânica exige ação de validação.",
+          taskName: "Escavação",
+        },
+      ],
+    };
+    const accentedInsights: ProjectInsights = {
+      ...insights,
+      summary: {
+        ...insights.summary,
+        message: "Ação de validação preservada.",
+      },
+      highlights: ["Escavação com acentuação preservada."],
+      warnings: ["Mecânica requer validação."],
+    };
+    const accentedWeightModel: ProjectWeightModel = {
+      ...weightModel,
+      taskWeights: weightModel.taskWeights.map((taskWeight) => ({
+        ...taskWeight,
+        taskName: "Escavação",
+        disciplineName: "Mecânica",
+      })),
+      disciplineWeights: weightModel.disciplineWeights.map((disciplineWeight) => ({
+        ...disciplineWeight,
+        name: "Mecânica",
+      })),
+    };
+    const accentedDisciplines: ProjectDiscipline[] = [
+      {
+        ...disciplines[0],
+        name: "Mecânica",
+        diagnostics: accentedDiagnostics,
+        insights: accentedInsights,
+      },
+    ];
+
+    const json = JSON.parse(
+      exportToJSON({
+        generatedAt: "2026-03-26T10:00:00.000Z",
+        project: accentedProject,
+        insights: accentedInsights,
+        score,
+        disciplines: accentedDisciplines,
+        weightModel: accentedWeightModel,
+        compensationAnalysis: {
+          topTasks: [
+            {
+              taskId: "1",
+              name: "Escavação",
+              disciplineName: "Mecânica",
+              remainingNormalizedValue: 750000,
+              impactPercent: 75,
+              progressPercent: 25,
+            },
+          ],
+          potential: {
+            top3ImpactPercent: 75,
+            top5ImpactPercent: 75,
+            message: "Ação de validação preservada.",
+          },
+        },
+        compensationByDiscipline: [
+          {
+            disciplineName: "Mecânica",
+            totalRemainingValue: 750000,
+            impactPercent: 75,
+            top3Tasks: [],
+            top3ImpactPercent: 75,
+          },
+        ],
+        disciplineProgress,
+        sCurve,
+        scheduleStatus,
+        analysisReliability,
+      }),
+    );
+    const xml = exportToXML({
+      generatedAt: "2026-03-26T10:00:00.000Z",
+      project: accentedProject,
+      diagnostics: accentedDiagnostics,
+      diagnosticsAggregation,
+      insights: accentedInsights,
+      score,
+      disciplines: accentedDisciplines,
+      weightModel: accentedWeightModel,
+      disciplineProgress,
+      sCurve,
+      scheduleStatus,
+      analysisReliability,
+      compensationAnalysis: {
+        topTasks: [
+          {
+            taskId: "1",
+            name: "Escavação",
+            disciplineName: "Mecânica",
+            remainingNormalizedValue: 750000,
+            impactPercent: 75,
+            progressPercent: 25,
+          },
+        ],
+        potential: {
+          top3ImpactPercent: 75,
+          top5ImpactPercent: 75,
+          message: "Ação de validação preservada.",
+        },
+      },
+      compensationByDiscipline: [
+        {
+          disciplineName: "Mecânica",
+          totalRemainingValue: 750000,
+          impactPercent: 75,
+          top3Tasks: [],
+          top3ImpactPercent: 75,
+        },
+      ],
+    });
+    const csv = exportAnalyticalCSV({
+      project: accentedProject,
+      diagnostics: accentedDiagnostics,
+      insights: accentedInsights,
+      weightModel: accentedWeightModel,
+      generatedAt: "2026-03-26T10:00:00.000Z",
+      analysisReliability,
+      scheduleStatus,
+      disciplineProgress,
+      sCurve,
+    });
+
+    expect(json.project.project_name).toBe("Projeto Validação");
+    expect(json.tasks[0].task_name).toBe("Escavação");
+    expect(xml).toContain("<name>Escavação</name>");
+    expect(xml).toContain("<message>Mecânica exige ação de validação.</message>");
+    expect(csv).toContain('"Escavação"');
+    expect(csv).toContain('"Mecânica exige ação de validação."');
+  });
+
   it("exports structured XML for external interoperability", () => {
     const xml = exportToXML({
       generatedAt: "2026-03-26T10:00:00.000Z",

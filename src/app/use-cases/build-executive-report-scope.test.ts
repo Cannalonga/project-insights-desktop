@@ -36,7 +36,7 @@ function createResult(): ProcessResult {
         },
         {
           id: "1.1",
-          name: "Escava��o",
+          name: "Escavação",
           startDate: "2026-03-01T08:00:00",
           endDate: "2026-03-10T17:00:00",
           percentComplete: 50,
@@ -60,7 +60,7 @@ function createResult(): ProcessResult {
         },
         {
           id: "2",
-          name: "Mec�nica",
+          name: "Mecânica",
           startDate: "2026-03-01T08:00:00",
           endDate: "2026-03-30T17:00:00",
           percentComplete: 0,
@@ -108,7 +108,7 @@ function createResult(): ProcessResult {
       ],
       resources: [
         { id: "r1", name: "Equipe Civil", type: "work" },
-        { id: "r2", name: "Equipe Mec�nica", type: "work" },
+        { id: "r2", name: "Equipe Mecânica", type: "work" },
       ],
       dependencies: [],
     },
@@ -219,7 +219,7 @@ function createResult(): ProcessResult {
         },
       },
       {
-        name: "Mecanica",
+        name: "Mecânica",
         outlineNumber: "2",
         totalTasks: 2,
         metrics: {
@@ -300,7 +300,7 @@ function createResult(): ProcessResult {
           progressWeightedPercent: 50,
         },
         {
-          name: "Mecanica",
+          name: "Mecânica",
           outlineNumber: "2",
           totalNormalizedValue: 526_229.51,
           earnedNormalizedValue: 0,
@@ -335,9 +335,10 @@ describe("buildExecutiveReportForScope", () => {
     });
 
     expect(html).toContain(">Civil<");
-    expect(html).toContain("Escava��o");
+    expect(html).toContain("Escavação");
+    expect(html).not.toContain("\uFFFD");
     expect(html).not.toContain("Montagem");
-    expect(html).not.toContain("Gap vs compensa��o");
+    expect(html).not.toContain("Gap vs compensação");
     expect(html).not.toContain("Diagnostics consolidados");
     expect(html).not.toContain("Sem nome");
   });
@@ -348,6 +349,8 @@ describe("buildExecutiveReportForScope", () => {
     });
 
     expect(html).toContain("RELATORIO EXECUTIVO");
+    expect(html).toContain("Mecânica");
+    expect(html).not.toContain("\uFFFD");
     expect(html).toContain("COMPENSACAO OPERACIONAL");
     expect(html).toContain("DISCIPLINAS");
     expect(html).not.toContain("Curva S");
