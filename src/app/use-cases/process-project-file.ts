@@ -35,6 +35,8 @@ type ProcessProjectFileOptions = {
   readBinaryProjectFile?: (filePath: string) => Promise<Uint8Array>;
 };
 
+type RoutedInputExtension = InputFileValidationResult["extension"] | ".xer";
+
 function isSupportedFile(filePath?: string): boolean {
   const normalized = filePath?.toLowerCase() ?? "";
   return normalized.endsWith(".mpp") || normalized.endsWith(".xml") || normalized.endsWith(".xer");
@@ -85,10 +87,11 @@ function buildFailureMessage(
   validation: InputFileValidationResult | null,
   userLogPath?: string | null,
 ): string {
+  const extension = validation?.extension as RoutedInputExtension | undefined;
   const detail =
     error instanceof Error && error.message.trim().length > 0
       ? error.message
-      : validation?.extension === ".xer"
+      : extension === ".xer"
         ? "Não foi possível concluir a análise deste arquivo Primavera XER."
         : "Não foi possível concluir a análise deste cronograma.";
 
@@ -149,6 +152,7 @@ export async function processProjectFile(
 
   try {
     validation = await validateFile(filePath);
+    const extension = validation.extension as RoutedInputExtension;
     await emitLog(options, {
       timestamp: new Date().toISOString(),
       level: "info",
@@ -160,19 +164,19 @@ export async function processProjectFile(
       sizeBytes: validation.sizeBytes,
     });
 
-    if (validation.extension === ".xml" || validation.extension === ".xer") {
-      currentStage = validation.extension === ".xml" ? "reading_xml" : "reading_xer";
+    if (extension === ".xml" || extension === ".xer") {
+      currentStage = extension === ".xml" ? "reading_xml" : "reading_xer";
       emitStage(options, currentStage);
       const readStartedAt = now();
 
       const fileContent =
-        validation.extension === ".xml"
+        extension === ".xml"
           ? input.xmlContent ?? (await readXmlFile(filePath))
           : decodeProjectText(await (options?.readBinaryProjectFile ?? readBinaryFile)(filePath));
       const readContentMs = now() - readStartedAt;
       const projectInput = await processProjectInput({
         filePath,
-        ...(validation.extension === ".xml" ? { xmlContent: fileContent } : { xerContent: fileContent }),
+        ...(extension === ".xml" ? { xmlContent: fileContent } : { xerContent: fileContent }),
       });
 
       if (!projectInput.ok) {
@@ -184,7 +188,7 @@ export async function processProjectFile(
       const analysisStartedAt = now();
       const result = await processor({
         filePath,
-        ...(validation.extension === ".xml" ? { xmlContent: fileContent } : {}),
+        ...(extension === ".xml" ? { xmlContent: fileContent } : {}),
         model: projectInput.project,
       });
       const analysisMs = now() - analysisStartedAt;
@@ -201,7 +205,7 @@ export async function processProjectFile(
         extension: validation.extension,
         mimeType: validation.mimeType,
         sizeBytes: validation.sizeBytes,
-        ...(validation.extension === ".xml" ? { readXmlMs: readContentMs } : {}),
+        ...(extension === ".xml" ? { readXmlMs: readContentMs } : {}),
         analysisMs,
         totalMs,
       });

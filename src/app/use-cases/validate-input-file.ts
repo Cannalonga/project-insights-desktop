@@ -14,12 +14,12 @@ export class InputFileValidationError extends Error {
 }
 
 export type InputFileValidationResult = {
-  extension: ".mpp" | ".xml";
-  mimeType: "application/vnd.ms-project" | "application/xml";
+  extension: ".mpp" | ".xml" | ".xer";
+  mimeType: "application/vnd.ms-project" | "application/xml" | "application/x-primavera-xer";
   sizeBytes: number;
 };
 
-function getExtension(filePath: string): ".mpp" | ".xml" | null {
+function getExtension(filePath: string): ".mpp" | ".xml" | ".xer" | null {
   const normalized = filePath.trim().toLowerCase();
 
   if (normalized.endsWith(".mpp")) {
@@ -28,6 +28,10 @@ function getExtension(filePath: string): ".mpp" | ".xml" | null {
 
   if (normalized.endsWith(".xml")) {
     return ".xml";
+  }
+
+  if (normalized.endsWith(".xer")) {
+    return ".xer";
   }
 
   return null;
@@ -42,8 +46,14 @@ function startsWithSignature(bytes: Uint8Array, signature: number[]): boolean {
 }
 
 function decodeTextPrefix(bytes: Uint8Array): string {
-  const prefix = bytes.slice(0, Math.min(bytes.length, 512));
+  const prefix = bytes.slice(0, Math.min(bytes.length, 2048));
   return new TextDecoder("utf-8", { fatal: false }).decode(prefix).trimStart();
+}
+
+function looksLikePrimaveraXer(textPrefix: string): boolean {
+  const normalized = textPrefix.replace(/^\uFEFF/, "");
+
+  return normalized.startsWith("ERMHDR") || normalized.includes("%T\tPROJECT");
 }
 
 function detectMimeType(bytes: Uint8Array): InputFileValidationResult["mimeType"] | null {
@@ -56,13 +66,17 @@ function detectMimeType(bytes: Uint8Array): InputFileValidationResult["mimeType"
     return "application/xml";
   }
 
+  if (looksLikePrimaveraXer(textPrefix)) {
+    return "application/x-primavera-xer";
+  }
+
   return null;
 }
 
 export async function validateInputFile(filePath: string): Promise<InputFileValidationResult> {
   const extension = getExtension(filePath);
   if (!extension) {
-    throw new InputFileValidationError("Selecione um arquivo .mpp ou .xml (MSPDI) para continuar.");
+    throw new InputFileValidationError("Selecione um arquivo .mpp ou .xer para continuar.");
   }
 
   const bytes = await readBinaryFile(filePath);
@@ -87,6 +101,10 @@ export async function validateInputFile(filePath: string): Promise<InputFileVali
 
   if (extension === ".xml" && mimeType !== "application/xml") {
     throw new InputFileValidationError("Não foi possível ler este arquivo .xml com segurança.");
+  }
+
+  if (extension === ".xer" && mimeType !== "application/x-primavera-xer") {
+    throw new InputFileValidationError("Não foi possível ler este arquivo .xer com segurança.");
   }
 
   return {

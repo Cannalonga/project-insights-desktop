@@ -977,8 +977,8 @@ export default function App() {
                 <ConfigItem label="expiresAt" value={formatDateTime(selectedCatalogItem.record.expiration_date)} />
                 <ConfigItem label="revokedAt" value={formatDateTime(selectedCatalogItem.revokedAt)} />
                 <ConfigItem
-                  label="fingerprint ou maquina vinculada"
-                  value={selectedCatalogItem.fingerprint || "Nao disponivel no catalogo local"}
+                  label="maquina vinculada"
+                  value={resolveMachineBindingState(selectedCatalogItem)}
                 />
                 <ConfigItem
                   label="ultimo estado conhecido"
@@ -1263,6 +1263,29 @@ function formatClassification(value: LicenseClassification) {
   if (value === "teste") return "Teste";
   if (value === "paga") return "Paga";
   return "Nao classificada";
+}
+
+function resolveMachineBindingState(item: CatalogSummary) {
+  const normalizedStatus = normalizeCatalogStatus(item.status);
+  const normalizedLastState = (item.lastState || "").trim().toLowerCase();
+  const hasFingerprint = Boolean(item.fingerprint?.trim());
+
+  if (hasFingerprint) {
+    return "🟢 Validada";
+  }
+
+  if (
+    normalizedStatus === "revoked" ||
+    normalizedStatus === "expired" ||
+    normalizedLastState.includes("revog") ||
+    normalizedLastState.includes("expir") ||
+    normalizedLastState.includes("invalid") ||
+    normalizedLastState.includes("mismatch")
+  ) {
+    return "🔴 Nao validada";
+  }
+
+  return "🟡 Desconhecido";
 }
 
 function compareDescendingTimestamps(left: string | null | undefined, right: string | null | undefined) {

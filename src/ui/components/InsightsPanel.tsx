@@ -239,8 +239,8 @@ function buildTaskPresentationGroups(
 function buildImpactCompositionData(
   groups: TaskPresentationGroup[],
 ): Array<{ key: string; label: string; value: number }> {
-  return groups.slice(0, 5).map((group) => ({
-    key: group.key,
+  return groups.slice(0, 5).map((group, index) => ({
+    key: `${group.key}-${index}`,
     label: group.occurrenceCount > 1 ? `${group.baseName} (${group.occurrenceCount})` : group.baseName,
     value: group.impactPercentTotal,
   }));
@@ -798,7 +798,7 @@ export function InsightsPanel({
 
           <div className="priority-list">
             {(isExecutiveMode ? presentationGroups.slice(0, 3) : presentationGroups).map((group, index) => (
-              <article key={group.key} className={`priority-card ${index < 3 ? "top-ranked" : ""}`}>
+              <article key={`${group.key}-${index}`} className={`priority-card ${index < 3 ? "top-ranked" : ""}`}>
                 {index < 3 ? <span className="priority-rank">#{index + 1}</span> : null}
                 <strong>
                   {group.occurrenceCount > 1
@@ -998,8 +998,8 @@ export function InsightsPanel({
 
                 {!isExecutiveMode ? (
                   <ul className="clean-list compact-task-list" style={{ marginTop: 16 }}>
-            {(isExecutiveMode ? presentationGroups.slice(0, 3) : presentationGroups).map((group) => (
-              <li key={`comp-${group.key}`}>
+            {(isExecutiveMode ? presentationGroups.slice(0, 3) : presentationGroups).map((group, index) => (
+              <li key={`comp-${group.key}-${index}`}>
                 <strong>
                   {group.occurrenceCount > 1
                     ? `${group.baseName} (${group.occurrenceCount} tarefas)`

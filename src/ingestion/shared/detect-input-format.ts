@@ -1,6 +1,6 @@
 import { parseMSPDI } from "../../core/parser/parse-mspdi";
 
-export type InputFormat = "mpp" | "mspdi-xml" | "unknown";
+export type InputFormat = "mpp" | "mspdi-xml" | "xer" | "unknown";
 
 export type DetectInputFormatInput = {
   filePath: string;
@@ -33,12 +33,30 @@ function isMSPDIXml(xmlContent?: string): boolean {
   }
 }
 
+function isPrimaveraXer(filePath: string, textContent?: string): boolean {
+  if (hasExtension(filePath, ".xer")) {
+    return true;
+  }
+
+  if (!textContent?.trim()) {
+    return false;
+  }
+
+  const normalized = textContent.replace(/^\uFEFF/, "").trimStart();
+  return normalized.startsWith("ERMHDR") || normalized.includes("%T\tPROJECT");
+}
+
 export function detectInputFormat(input: DetectInputFormatInput): InputFormat {
   if (hasExtension(input.filePath, ".mpp")) {
     return "mpp";
   }
 
-  const xmlContent = input.xmlContent ?? decodeBytes(input.bytes);
+  const textContent = input.xmlContent ?? decodeBytes(input.bytes);
+  if (isPrimaveraXer(input.filePath, textContent)) {
+    return "xer";
+  }
+
+  const xmlContent = textContent;
   if (isMSPDIXml(xmlContent)) {
     return "mspdi-xml";
   }
