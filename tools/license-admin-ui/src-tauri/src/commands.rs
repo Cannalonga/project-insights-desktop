@@ -1,5 +1,6 @@
 ﻿use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -47,9 +48,12 @@ pub struct PathOverrides {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct LicensePreview {
+    #[serde(alias = "license_id")]
     license_id: String,
+    #[serde(alias = "customer_name")]
     customer_name: String,
     plan: String,
+    #[serde(alias = "expiration_date")]
     expiration_date: String,
 }
 
@@ -57,17 +61,26 @@ struct LicensePreview {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CatalogRecord {
+    #[serde(alias = "license_id")]
     license_id: String,
+    #[serde(alias = "customer_name")]
     customer_name: String,
     email: Option<String>,
     plan: String,
+    #[serde(alias = "expiration_date")]
     expiration_date: String,
+    #[serde(alias = "issued_at")]
     issued_at: String,
+    #[serde(alias = "license_hash")]
     license_hash: String,
+    #[serde(alias = "license_json")]
     license_json: String,
+    #[serde(alias = "license_preview")]
     license_preview: Option<LicensePreview>,
+    #[serde(alias = "schema_version")]
     schema_version: Option<u32>,
     notes: Option<String>,
+    #[serde(alias = "created_at")]
     created_at: String,
 }
 
@@ -407,6 +420,72 @@ pub fn load_license_catalog(overrides: Option<PathOverrides>) -> Result<String, 
             Some(json!({ "reason": error.to_string() })),
         ))
     })
+}
+
+#[tauri::command]
+pub fn remove_license_catalog_records(
+    license_ids: Vec<String>,
+    overrides: Option<PathOverrides>,
+) -> Result<String, String> {
+    if license_ids.is_empty() {
+        return Err(structured_error_string(error_with_code(
+            "invalid_catalog_cleanup_request",
+            "Nenhuma licenca foi informada para limpeza local.".to_string(),
+            None,
+        )));
+    }
+
+    let paths = resolve_paths(overrides).map_err(structured_error_string)?;
+    let requested_ids: HashSet<String> = license_ids
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    if requested_ids.is_empty() {
+        return Err(structured_error_string(error_with_code(
+            "invalid_catalog_cleanup_request",
+            "Nenhuma licenca valida foi informada para limpeza local.".to_string(),
+            None,
+        )));
+    }
+
+    if !paths.registry_file_path.exists() {
+        return Ok(
+            json!({
+                "removedCount": 0,
+                "remainingCount": 0,
+            })
+            .to_string(),
+        );
+    }
+
+    let records = read_catalog_records(&paths.registry_file_path).map_err(structured_error_string)?;
+    let remaining_records: Vec<Value> = records
+        .iter()
+        .filter(|record| {
+            let license_id = record
+                .get("license_id")
+                .and_then(Value::as_str)
+                .map(|value| value.trim())
+                .unwrap_or("");
+
+            !requested_ids.contains(license_id)
+        })
+        .cloned()
+        .collect();
+
+    let removed_count = records.len().saturating_sub(remaining_records.len());
+
+    write_catalog_records(&paths, &remaining_records).map_err(structured_error_string)?;
+
+    Ok(
+        json!({
+            "removedCount": removed_count,
+            "remainingCount": remaining_records.len(),
+        })
+        .to_string(),
+    )
 }
 
 fn parse_validate_input(input: &str) -> Result<ValidateLicenseInput, CommandError> {
@@ -799,6 +878,67 @@ fn read_catalog_records(registry_file_path: &Path) -> Result<Vec<Value>, Command
 
     Ok(records)
 }
+
+fn write_catalog_records(paths: &ResolvedPaths, records: &[Value]) -> Result<(), CommandError> {
+    fs::create_dir_all(&paths.registry_dir).map_err(|error| {
+        error_with_code(
+            "registry_dir_failed",
+            "Falha ao atualizar o catalogo local de licencas.".to_string(),
+            Some(json!({ "reason": error.to_string() })),
+        )
+    })?;
+
+    let _guard = registry_write_lock().lock().map_err(|_| {
+        error_with_code(
+            "registry_lock_failed",
+            "Falha ao atualizar o catalogo local de licencas.".to_string(),
+            Some(json!({ "reason": "Nao foi possivel obter o lock de escrita do catalogo." })),
+        )
+    })?;
+
+    rotate_registry_backups(&paths.registry_file_path, &paths.registry_backup_file_path);
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&paths.registry_file_path)
+        .map_err(|error| {
+            error_with_code(
+                "registry_open_failed",
+                "Falha ao atualizar o catalogo local de licencas.".to_string(),
+                Some(json!({ "reason": error.to_string() })),
+            )
+        })?;
+
+    for record in records {
+        let record_line = serde_json::to_string(record).map_err(|error| {
+            error_with_code(
+                "registry_encode_failed",
+                "Falha ao atualizar o catalogo local de licencas.".to_string(),
+                Some(json!({ "reason": error.to_string() })),
+            )
+        })?;
+
+        file.write_all(record_line.as_bytes()).map_err(|error| {
+            error_with_code(
+                "registry_write_failed",
+                "Falha ao atualizar o catalogo local de licencas.".to_string(),
+                Some(json!({ "reason": error.to_string() })),
+            )
+        })?;
+        file.write_all(b"\n").map_err(|error| {
+            error_with_code(
+                "registry_write_failed",
+                "Falha ao atualizar o catalogo local de licencas.".to_string(),
+                Some(json!({ "reason": error.to_string() })),
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
 fn persist_catalog_record(paths: &ResolvedPaths, parsed: &mut CatalogRecord) -> Result<(), CommandError> {
     if parsed.license_preview.is_none() {
         parsed.license_preview = Some(LicensePreview {

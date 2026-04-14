@@ -11,7 +11,8 @@ fn main() {
             commands::generate_license,
             commands::validate_license,
             commands::save_license_record,
-            commands::load_license_catalog
+            commands::load_license_catalog,
+            commands::remove_license_catalog_records
         ])
         .run(tauri::generate_context!())
         .expect("error while running license-admin-ui");
