@@ -17,10 +17,10 @@ function getUserErrorMessage(err: unknown): string {
   }
 
   if (err instanceof Error && "code" in err && err.code === "MPP_INPUT_FATAL") {
-    return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
+    return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, gere uma nova exportação do cronograma e processe novamente.";
   }
 
-  return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, tente exportar o cronograma como XML (MSPDI) e processar novamente.";
+  return "Não foi possível concluir a análise completa deste arquivo. Isso pode acontecer em projetos maiores ou com estruturas específicas. Se possível, gere uma nova exportação do cronograma e processe novamente.";
 }
 
 function getStageMessage(stage: ProcessingStage): string {
@@ -28,13 +28,15 @@ function getStageMessage(stage: ProcessingStage): string {
     case "validating_input":
       return "Processando arquivo...";
     case "reading_xml":
-      return "Lendo arquivo XML (MSPDI)...";
+      return "Lendo cronograma...";
+    case "reading_xer":
+      return "Lendo arquivo Primavera XER...";
     case "converting_mpp":
       return "Convertendo cronograma...";
     case "generating_analysis":
       return "Gerando análise...";
     case "completed":
-      return "Analise concluida.";
+      return "Análise concluída.";
     default:
       return "Processando arquivo...";
   }
@@ -61,7 +63,9 @@ export function useProcessMPP() {
   function startSlowTimer(): void {
     clearSlowTimer();
     slowTimerRef.current = window.setTimeout(() => {
-      setSlowProcessingMessage("O arquivo é grande e o processamento está levando mais tempo que o normal. Projetos maiores podem levar mais tempo para análise.");
+      setSlowProcessingMessage(
+        "O arquivo é grande e o processamento está levando mais tempo que o normal. Projetos maiores podem levar mais tempo para análise.",
+      );
     }, SLOW_PROCESSING_THRESHOLD_MS);
   }
 

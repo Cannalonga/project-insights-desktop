@@ -1,4 +1,4 @@
-import { readTextFile } from "@tauri-apps/api/fs";
+import { readBinaryFile, readTextFile } from "@tauri-apps/api/fs";
 
 import {
   appendProcessingLog,
@@ -8,16 +8,21 @@ import {
 import { convertMPPToXML } from "./convert-mpp-to-xml";
 import { processMPPWithHistory } from "./process-mpp-with-history";
 import type { ProcessInput, ProcessResult } from "./process-mpp";
-import { type InputFileValidationResult, validateInputFile } from "./validate-input-file";
+import {
+  InputFileValidationError,
+  type InputFileValidationResult,
+  validateInputFile,
+} from "./validate-input-file";
 import { processProjectInput, type ProjectInputError } from "../../ingestion/shared/process-project-input";
 
 const MPP_FALLBACK_MESSAGE =
-  "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.";
+  "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Se possível, gere uma nova exportação do cronograma e processe novamente.";
 const MPP_CONVERSION_FAILED_CODE = "MPP_CONVERSION_FAILED";
 
 export type ProcessingStage =
   | "validating_input"
   | "reading_xml"
+  | "reading_xer"
   | "converting_mpp"
   | "generating_analysis"
   | "completed";
@@ -27,15 +32,16 @@ type ProcessProjectFileOptions = {
   now?: () => number;
   logEvent?: (payload: ProcessingLogPayload) => Promise<void>;
   exportUserLog?: () => Promise<string | null>;
+  readBinaryProjectFile?: (filePath: string) => Promise<Uint8Array>;
 };
 
 function isSupportedFile(filePath?: string): boolean {
   const normalized = filePath?.toLowerCase() ?? "";
-  return normalized.endsWith(".mpp") || normalized.endsWith(".xml");
+  return normalized.endsWith(".mpp") || normalized.endsWith(".xml") || normalized.endsWith(".xer");
 }
 
 function buildUnsupportedInputError(): Error {
-  return new Error("A entrada do Project Insights aceita arquivos .mpp ou .xml (MSPDI).");
+  return new Error("A entrada do Project Insights aceita arquivos .mpp ou .xer.");
 }
 
 function getErrorDetails(error: unknown): { message: string; stack?: string } {
@@ -68,6 +74,29 @@ async function exportUserAccessibleLog(
 ): Promise<string | null> {
   const exporter = options?.exportUserLog ?? exportProcessingLogForUser;
   return exporter();
+}
+
+function decodeProjectText(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+}
+
+function buildFailureMessage(
+  error: unknown,
+  validation: InputFileValidationResult | null,
+  userLogPath?: string | null,
+): string {
+  const detail =
+    error instanceof Error && error.message.trim().length > 0
+      ? error.message
+      : validation?.extension === ".xer"
+        ? "Não foi possível concluir a análise deste arquivo Primavera XER."
+        : "Não foi possível concluir a análise deste cronograma.";
+
+  if (!userLogPath) {
+    return detail;
+  }
+
+  return `${detail} Um log técnico foi salvo em ${userLogPath}.`;
 }
 
 function buildMppFallbackMessage(userLogPath?: string | null): string {
@@ -131,16 +160,19 @@ export async function processProjectFile(
       sizeBytes: validation.sizeBytes,
     });
 
-    if (validation.extension === ".xml") {
-      currentStage = "reading_xml";
+    if (validation.extension === ".xml" || validation.extension === ".xer") {
+      currentStage = validation.extension === ".xml" ? "reading_xml" : "reading_xer";
       emitStage(options, currentStage);
       const readStartedAt = now();
 
-      const xmlContent = input.xmlContent ?? (await readXmlFile(filePath));
-      const readXmlMs = now() - readStartedAt;
+      const fileContent =
+        validation.extension === ".xml"
+          ? input.xmlContent ?? (await readXmlFile(filePath))
+          : decodeProjectText(await (options?.readBinaryProjectFile ?? readBinaryFile)(filePath));
+      const readContentMs = now() - readStartedAt;
       const projectInput = await processProjectInput({
         filePath,
-        xmlContent,
+        ...(validation.extension === ".xml" ? { xmlContent: fileContent } : { xerContent: fileContent }),
       });
 
       if (!projectInput.ok) {
@@ -152,7 +184,7 @@ export async function processProjectFile(
       const analysisStartedAt = now();
       const result = await processor({
         filePath,
-        xmlContent,
+        ...(validation.extension === ".xml" ? { xmlContent: fileContent } : {}),
         model: projectInput.project,
       });
       const analysisMs = now() - analysisStartedAt;
@@ -169,7 +201,7 @@ export async function processProjectFile(
         extension: validation.extension,
         mimeType: validation.mimeType,
         sizeBytes: validation.sizeBytes,
-        readXmlMs,
+        ...(validation.extension === ".xml" ? { readXmlMs: readContentMs } : {}),
         analysisMs,
         totalMs,
       });
@@ -259,6 +291,11 @@ export async function processProjectFile(
         totalMs: now() - startedAt,
         ...getErrorDetails(error),
       });
+
+      if (!(error instanceof InputFileValidationError)) {
+        const userLogPath = await exportUserAccessibleLog(options);
+        throw new ProjectFileGuidanceError(buildFailureMessage(error, validation, userLogPath));
+      }
     }
 
     throw error;

@@ -114,7 +114,7 @@ export function App() {
                 : `Leitura pronta para ${result.model.name || "projeto carregado"}`
               : analysisMode === "comparison"
                 ? "Selecione a versão base e a versão atual do mesmo projeto"
-                : "Selecione um arquivo MPP ou XML"}
+                : "Selecione um cronograma MPP ou XER"}
           </span>
         </div>
 

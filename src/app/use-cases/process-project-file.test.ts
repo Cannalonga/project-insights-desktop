@@ -118,7 +118,7 @@ describe("processProjectFile", () => {
   it("returns guided fallback when mpp conversion is not possible", async () => {
     const convertMppToXml = vi
       .fn()
-      .mockRejectedValue(new MPPConversionError("Nao foi possivel processar o arquivo .mpp."));
+      .mockRejectedValue(new MPPConversionError("Não foi possível processar o arquivo .mpp."));
     const validateFile = vi.fn().mockResolvedValue({
       extension: ".mpp",
       mimeType: "application/vnd.ms-project",
@@ -140,7 +140,7 @@ describe("processProjectFile", () => {
         { logEvent, exportUserLog },
       ),
     ).rejects.toThrow(
-      "Um log técnico foi salvo em C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log.",
+      "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Se possível, gere uma nova exportação do cronograma e processe novamente. Um log técnico foi salvo em C:\\Users\\cliente\\Desktop\\CannaConverter_Logs\\cannaconverter-log-1.log.",
     );
 
     expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ describe("processProjectFile", () => {
   it("keeps guided fallback when desktop log export is unavailable", async () => {
     const convertMppToXml = vi
       .fn()
-      .mockRejectedValue(new MPPConversionError("Nao foi possivel processar o arquivo .mpp."));
+      .mockRejectedValue(new MPPConversionError("Não foi possível processar o arquivo .mpp."));
     const validateFile = vi.fn().mockResolvedValue({
       extension: ".mpp",
       mimeType: "application/vnd.ms-project",
@@ -170,7 +170,7 @@ describe("processProjectFile", () => {
         { exportUserLog },
       ),
     ).rejects.toThrow(
-      "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Para garantir compatibilidade total, exporte o arquivo como XML (MSPDI) e tente novamente.",
+      "Não foi possível processar este arquivo diretamente. Algumas versões do MS Project podem gerar variações no formato. Se possível, gere uma nova exportação do cronograma e processe novamente.",
     );
 
     expect(exportUserLog).toHaveBeenCalledTimes(1);
@@ -179,7 +179,7 @@ describe("processProjectFile", () => {
   it("fails explicitly when the selected file is unsafe before conversion starts", async () => {
     const validateFile = vi
       .fn()
-      .mockRejectedValue(new InputFileValidationError("O arquivo selecionado esta vazio ou corrompido."));
+      .mockRejectedValue(new InputFileValidationError("O arquivo selecionado está vazio ou corrompido."));
     const convertMppToXml = vi.fn();
 
     await expect(
@@ -190,7 +190,7 @@ describe("processProjectFile", () => {
         convertMppToXml,
         validateFile,
       ),
-    ).rejects.toThrow("O arquivo selecionado esta vazio ou corrompido.");
+    ).rejects.toThrow("O arquivo selecionado está vazio ou corrompido.");
 
     expect(convertMppToXml).not.toHaveBeenCalled();
     expect(mockedProcessMPPWithHistory).not.toHaveBeenCalled();

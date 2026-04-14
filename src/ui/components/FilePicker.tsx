@@ -42,7 +42,7 @@ export function FilePicker({
   async function selectProjectFile(): Promise<string | null> {
     const filePath = await open({
       multiple: false,
-      filters: [{ name: "Project Files", extensions: ["mpp", "xml"] }],
+      filters: [{ name: "Cronogramas MPP e XER", extensions: ["mpp", "xer"] }],
     });
 
     if (!filePath || Array.isArray(filePath)) {
@@ -148,7 +148,7 @@ export function FilePicker({
             {loading ? "Processando..." : "Selecionar arquivo"}
           </button>
           <p className="muted-text" style={{ margin: "10px 0 0" }}>
-            Selecione um cronograma para gerar a leitura do projeto.
+            Selecione um cronograma MPP ou XER para gerar a leitura do projeto.
           </p>
         </>
       ) : (
